@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Poker Pilot</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/lobby.css">
+  <link rel="stylesheet" href="/static/loading.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- ============================== LOBBY ============================== -->
+  <section id="lobby" class="screen">
+    <div class="room" aria-hidden="true">
+      <div class="glow curtain-left"></div>
+      <div class="glow curtain-right"></div>
+      <div class="glow lamp-left"></div>
+      <div class="glow lamp-right"></div>
+      <div class="bokeh"></div>
+      <div class="chair chair-left"></div>
+      <div class="chair chair-right"></div>
+    </div>
+
+    <header class="brand">
+      <div class="crest">
+        <span class="crest-line left"></span>
+        <svg class="crest-spade" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#ffe6a3"/>
+              <stop offset=".5" stop-color="#d9a441"/>
+              <stop offset="1" stop-color="#9b6b1c"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 4 C 22 18, 6 26, 6 38 C 6 47, 14 52, 21 50 C 25 49, 28 46, 30 43 C 29 50, 26 55, 20 60 L 44 60 C 38 55, 35 50, 34 43 C 36 46, 39 49, 43 50 C 50 52, 58 47, 58 38 C 58 26, 42 18, 32 4 Z" fill="url(#gold)"/>
+          <path d="M32 27 L 36 33 L 32 39 L 28 33 Z" fill="#c4161c"/>
+        </svg>
+        <span class="crest-line right"></span>
+      </div>
+      <h1 class="wordmark"><span class="poker">Poker</span> <span class="pilot">Pilot</span></h1>
+      <p class="tagline">LEARN <i>&middot;</i> PLAY <i>&middot;</i> IMPROVE</p>
+    </header>
+
+    <div class="lobby-table" aria-hidden="true">
+      <div class="rail"></div>
+      <div class="felt"></div>
+      <div class="cupholder left"></div>
+      <div class="cupholder right"></div>
+    </div>
+
+    <div class="props" aria-hidden="true">
+      <div class="chipstacks left">
+        <div class="stack red tall"></div>
+        <div class="stack red mid"></div>
+        <div class="stack red short front"></div>
+        <div class="stack black front2"></div>
+        <div class="stack black front3"></div>
+      </div>
+      <div class="cardbox left"></div>
+      <div class="chipstacks right">
+        <div class="stack red tall"></div>
+        <div class="stack red mid"></div>
+        <div class="stack black front"></div>
+        <div class="stack red front2"></div>
+      </div>
+      <div class="cardbox right"></div>
+    </div>
+
+    <nav class="modes" aria-label="Choose a difficulty">
+      <button class="mode" data-difficulty="easy">
+        <span class="play-card tilt-left">
+          <span class="idx top">2<b>&spades;</b></span>
+          <span class="pip">&spades;</span>
+          <span class="idx bottom">2<b>&spades;</b></span>
+        </span>
+        <span class="mode-name">EASY</span>
+        <span class="mode-rule"></span>
+      </button>
+      <button class="mode" data-difficulty="medium">
+        <span class="play-card red">
+          <span class="idx top">7<b>&hearts;</b></span>
+          <span class="pip">&hearts;</span>
+          <span class="idx bottom">7<b>&hearts;</b></span>
+        </span>
+        <span class="mode-name gold">MEDIUM</span>
+        <span class="mode-rule"></span>
+      </button>
+      <button class="mode" data-difficulty="hard">
+        <span class="play-card red tilt-right">
+          <span class="idx top">A<b>&diams;</b></span>
+          <span class="pip">&diams;</span>
+          <span class="idx bottom">A<b>&diams;</b></span>
+        </span>
+        <span class="mode-name gold">HARD</span>
+        <span class="mode-rule"></span>
+      </button>
+    </nav>
+
+    <p id="lobby-error" class="lobby-error" hidden></p>
+  </section>
+
+  <!-- ============================= LOADING ============================= -->
+  <section id="loading" class="screen" hidden aria-live="polite">
+    <div class="loading-panel">
+      <div class="loader">
+        <svg class="rings" viewBox="0 0 640 640" aria-hidden="true">
+          <circle cx="320" cy="320" r="308" class="ring faint"/>
+          <circle cx="320" cy="320" r="268" class="ring"/>
+          <circle cx="320" cy="320" r="228" class="ring faint"/>
+          <g class="spin slow">
+            <circle cx="320" cy="320" r="268" class="arc" pathLength="100" stroke-dasharray="17 83" stroke-dashoffset="25"/>
+            <circle cx="320" cy="320" r="268" class="arc" pathLength="100" stroke-dasharray="21 79" stroke-dashoffset="-35"/>
+          </g>
+          <g class="spin reverse">
+            <circle cx="320" cy="320" r="228" class="arc thin" pathLength="100" stroke-dasharray="9 91" stroke-dashoffset="-56"/>
+            <circle cx="320" cy="320" r="228" class="arc thin" pathLength="100" stroke-dasharray="11 89" stroke-dashoffset="-2"/>
+          </g>
+          <g class="nodes">
+            <circle cx="320" cy="52" r="5"/>
+            <circle cx="588" cy="320" r="5"/>
+            <circle cx="320" cy="588" r="5"/>
+            <circle cx="52" cy="320" r="5"/>
+          </g>
+        </svg>
+        <div class="ticks" aria-hidden="true"></div>
+        <svg class="center-spade" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 4 C 22 18, 6 26, 6 38 C 6 47, 14 52, 21 50 C 25 49, 28 46, 30 43 C 29 50, 26 55, 20 60 L 44 60 C 38 55, 35 50, 34 43 C 36 46, 39 49, 43 50 C 50 52, 58 47, 58 38 C 58 26, 42 18, 32 4 Z"/>
+        </svg>
+        <div class="orbit cards-orbit" aria-hidden="true">
+          <div class="orbit-cards">
+            <div class="mini-card back-card"><span>A</span><b>&hearts;</b><em>&hearts;</em></div>
+            <div class="mini-card front-card"><span>A</span><b>&spades;</b>
+              <svg viewBox="0 0 64 64"><defs><linearGradient id="gold-loading" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3d27a"/><stop offset=".55" stop-color="#c8922f"/><stop offset="1" stop-color="#8a5f17"/></linearGradient></defs><path d="M32 4 C 22 18, 6 26, 6 38 C 6 47, 14 52, 21 50 C 25 49, 28 46, 30 43 C 29 50, 26 55, 20 60 L 44 60 C 38 55, 35 50, 34 43 C 36 46, 39 49, 43 50 C 50 52, 58 47, 58 38 C 58 26, 42 18, 32 4 Z" fill="url(#gold-loading)"/></svg>
+            </div>
+          </div>
+        </div>
+        <div class="orbit chip-orbit" aria-hidden="true"><div class="orbit-chip"></div></div>
+      </div>
+      <p class="loading-text">DEALING YOU IN</p>
+    </div>
+  </section>
+
+  <!-- ============================== GAME =============================== -->
+  <section id="game" class="screen" hidden>
+    <header class="topbar">
+      <button id="quit" class="ghost">&larr; Lobby</button>
+      <div class="hand-info"><span id="hand-number"></span> &middot; <span id="street"></span></div>
+      <button id="history-toggle" class="ghost" aria-expanded="false" aria-controls="history">History</button>
+    </header>
+
+    <div class="arena">
+      <div class="table-area" id="table-area">
+        <div class="poker-table">
+          <div class="felt-line"></div>
+          <div class="table-center">
+            <div class="pot" id="pot"></div>
+            <div class="board" id="board"></div>
+            <div class="result-toast" id="result-toast" hidden></div>
+          </div>
+        </div>
+        <!-- seats and bet chips are rendered by app.js -->
+        <div id="seats"></div>
+      </div>
+
+      <div class="controls" id="controls">
+        <div class="hand-strength" id="hand-strength"></div>
+
+        <div class="actions" id="actions" hidden>
+          <div class="action-row">
+            <button id="btn-fold" class="act fold">Fold</button>
+            <button id="btn-call" class="act call"><span id="call-label">Check</span><span id="call-amount" class="amount"></span></button>
+            <div class="raise-group">
+              <button id="btn-raise" class="act raise"><span id="raise-label">Raise</span></button>
+              <button id="raise-caret" class="caret" aria-label="Show bet sizes" aria-expanded="true">&#8964;</button>
+            </div>
+            <input type="range" id="raise-slider" aria-label="Bet size">
+            <div class="amount-box">
+              <span>$</span>
+              <input type="text" id="raise-input" inputmode="decimal" aria-label="Bet amount in dollars">
+            </div>
+          </div>
+          <div class="presets" id="presets">
+            <button data-preset="min"></button>
+            <button data-preset="0.5"></button>
+            <button data-preset="0.75"></button>
+            <button data-preset="1"></button>
+            <button data-preset="max"></button>
+          </div>
+        </div>
+
+        <div class="waiting" id="waiting" hidden></div>
+
+        <div class="hand-done" id="hand-done" hidden>
+          <button id="next-hand" class="act next">Next hand</button>
+        </div>
+
+        <p id="game-error" class="game-error" hidden></p>
+      </div>
+    </div>
+
+    <aside class="history" id="history" hidden>
+      <div class="history-head">
+        <h2>Hand history</h2>
+        <button id="history-close" class="ghost" aria-label="Close history">&times;</button>
+      </div>
+      <ol class="log" id="log"></ol>
+    </aside>
+  </section>
+
+  <!-- ============================ GAME OVER ============================ -->
+  <div class="modal" id="game-over" hidden>
+    <div class="modal-card">
+      <h2 id="game-over-title"></h2>
+      <p id="game-over-text"></p>
+      <div class="modal-buttons">
+        <button id="play-again" class="act next">Play again</button>
+        <button id="to-lobby" class="ghost">Change difficulty</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
