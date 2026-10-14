@@ -1,21 +1,43 @@
-import { useState, useEffect, useRef } from 'react';
-import EmojiPicker from 'emoji-picker-react';
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
+import type { EmojiClickData } from 'emoji-picker-react';
 import './App.css';
 
-function App() {
-  const [username, setUsername] = useState('');
-  const [isJoined, setIsJoined] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [socket, setSocket] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const chatEndRef = useRef(null);
-  const emojiPickerRef = useRef(null);
+const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
-  // Close emoji picker when clicking outside of it
+interface ChatMessage {
+  sender: string;
+  text: string;
+  timestamp: string;
+}
+
+const CHAT_WS_BASE_URL = import.meta.env.VITE_CHAT_WS_URL
+  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3000`;
+
+function isChatMessage(message: unknown): message is ChatMessage {
+  return typeof message === 'object'
+    && message !== null
+    && 'sender' in message
+    && typeof message.sender === 'string'
+    && 'text' in message
+    && typeof message.text === 'string'
+    && (!('timestamp' in message) || typeof message.timestamp === 'string');
+}
+
+function App() {
+  const chatRoom = new URLSearchParams(window.location.search).get('room') || '';
+  const [username, setUsername] = useState(() => localStorage.getItem('pokerpilot-chat-name') || '');
+  const [isJoined, setIsJoined] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('Connecting…');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (event.target instanceof Node && !emojiPickerRef.current?.contains(event.target)) {
         setShowEmojiPicker(false);
       }
     };
@@ -23,79 +45,96 @@ function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Initialize WebSocket connection after the user joins
   useEffect(() => {
-    if (!isJoined) return;
+    if (!isJoined) return undefined;
 
-    const newSocket = new WebSocket('ws://localhost:3000');
-    setSocket(newSocket);
+    let reconnectTimer: number | undefined;
+    let shouldReconnect = true;
 
-    newSocket.onopen = () => {
-      console.log('WebSocket connection established');
-    };
-
-    newSocket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setMessages((prevMessages) => [...prevMessages, data]);
-      } catch (e) {
-        // Fallback if the server sends raw text instead of JSON
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          { sender: 'Server', text: event.data.toString() }
-        ]);
+    const connect = () => {
+      if (!/^[A-Za-z0-9_-]{20,64}$/.test(chatRoom)) {
+        setConnectionStatus('Invalid game chat room');
+        return;
       }
+      setConnectionStatus('Connecting…');
+      const socket = new WebSocket(`${CHAT_WS_BASE_URL}?room=${encodeURIComponent(chatRoom)}`);
+      socketRef.current = socket;
+
+      socket.onopen = () => setConnectionStatus('Connected');
+      socket.onmessage = (event: MessageEvent<string>) => {
+        try {
+          const message: unknown = JSON.parse(event.data);
+          if (isChatMessage(message)) {
+            setConnectionStatus('Connected');
+            setMessages((previous) => [...previous, { ...message, timestamp: message.timestamp || '' }].slice(-200));
+          }
+        } catch {
+          setConnectionStatus('Received an invalid chat message');
+        }
+      };
+      socket.onerror = () => setConnectionStatus('Connection issue');
+      socket.onclose = () => {
+        if (shouldReconnect) {
+          setConnectionStatus('Reconnecting…');
+          reconnectTimer = window.setTimeout(connect, 1500);
+        }
+      };
     };
 
-    newSocket.onclose = () => console.log('WebSocket connection closed');
-    newSocket.onerror = (error) => console.error('WebSocket error:', error);
+    connect();
+    return () => {
+      shouldReconnect = false;
+      window.clearTimeout(reconnectTimer);
+      socketRef.current?.close();
+      socketRef.current = null;
+    };
+  }, [chatRoom, isJoined]);
 
-    return () => newSocket.close();
-  }, [isJoined]);
-
-  // Auto-scroll to the bottom when new messages arrive
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleJoin = (e) => {
-    e.preventDefault();
-    if (username.trim() !== '') {
-      setIsJoined(true);
-    }
+  const handleJoin = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = username.trim().slice(0, 24);
+    if (!name) return;
+    localStorage.setItem('pokerpilot-chat-name', name);
+    setUsername(name);
+    setIsJoined(true);
   };
 
-  const handleEmojiClick = (emojiData) => {
-    setInput((prev) => prev + emojiData.emoji);
+  const handleEmojiClick = (emojiData: EmojiClickData) => {
+    setInput((previous) => previous + emojiData.emoji);
   };
 
   const sendMessage = () => {
-    if (socket && input.trim() !== '' && socket.readyState === WebSocket.OPEN) {
-      const messagePayload = {
-        sender: username,
-        text: input,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
+    const text = input.trim().slice(0, 500);
+    const socket = socketRef.current;
+    if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
 
-      // Send structured JSON message over WebSocket
-      socket.send(JSON.stringify(messagePayload));
-      setInput('');
-      setShowEmojiPicker(false);
-    }
+    const message: ChatMessage = {
+      sender: username,
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    socket.send(JSON.stringify(message));
+    setInput('');
+    setShowEmojiPicker(false);
   };
 
-  // Step 1: Name Entry Screen
   if (!isJoined) {
     return (
       <div className="join-screen">
         <form onSubmit={handleJoin} className="join-card">
           <h2>Welcome to Chat</h2>
-          <p>Enter your name to start messaging</p>
+          <p>Enter your name to message other players</p>
           <input
             type="text"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your name..."
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Enter your name…"
+            maxLength={24}
+            autoComplete="nickname"
             autoFocus
             required
           />
@@ -105,24 +144,25 @@ function App() {
     );
   }
 
-  // Step 2: Main Chat Room Screen
   return (
-    <div className="App">
+    <main className="App">
       <header className="chat-header">
         <div className="header-title">Chat with fellow Pokermates</div>
         <div className="user-badge">
-          Logged in as <strong>{username}</strong>
+          <span className={`connection-dot ${connectionStatus === 'Connected' ? 'connected' : ''}`} aria-hidden="true" />
+          <span className="connection-status" role="status">{connectionStatus}</span>
+          <strong>{username}</strong>
         </div>
       </header>
 
-      <div className="chat-container">
-        {messages.map((msg, index) => {
-          const isSelf = msg.sender === username;
+      <div className="chat-container" role="log" aria-live="polite" aria-relevant="additions">
+        {messages.map((message, index) => {
+          const isSelf = message.sender === username;
           return (
-            <div key={index} className={`chat-message-wrapper ${isSelf ? 'self' : 'other'}`}>
-              <span className="message-sender">{msg.sender}</span>
-              <div className="chat-message">{msg.text}</div>
-              {msg.timestamp && <span className="message-time">{msg.timestamp}</span>}
+            <div key={`${message.timestamp}-${index}`} className={`chat-message-wrapper ${isSelf ? 'self' : 'other'}`}>
+              <span className="message-sender">{message.sender}</span>
+              <div className="chat-message">{message.text}</div>
+              {message.timestamp && <span className="message-time">{message.timestamp}</span>}
             </div>
           );
         })}
@@ -131,32 +171,42 @@ function App() {
 
       {showEmojiPicker && (
         <div className="emoji-picker-container" ref={emojiPickerRef}>
-          <EmojiPicker onEmojiClick={handleEmojiClick} width={320} height={360} />
+          <Suspense fallback={<div className="emoji-picker-loading">Loading emojis…</div>}>
+            <EmojiPicker onEmojiClick={handleEmojiClick} width={Math.min(320, window.innerWidth - 56)} height={360} />
+          </Suspense>
         </div>
       )}
 
-      <div className="input-container">
+      <form
+        className="input-container"
+        onSubmit={(event) => {
+          event.preventDefault();
+          sendMessage();
+        }}
+      >
         <button
           type="button"
           className="emoji-toggle-btn"
-          onClick={() => setShowEmojiPicker((prev) => !prev)}
+          onClick={() => setShowEmojiPicker((previous) => !previous)}
+          aria-label="Choose an emoji"
+          aria-expanded={showEmojiPicker}
         >
           😊
         </button>
-
         <input
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-          placeholder="Type your message..."
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Type your message…"
+          maxLength={500}
+          autoComplete="off"
+          aria-label="Message"
         />
-
-        <button type="button" className="send-btn" onClick={sendMessage}>
+        <button type="submit" className="send-btn" disabled={!input.trim() || connectionStatus !== 'Connected'}>
           Send
         </button>
-      </div>
-    </div>
+      </form>
+    </main>
   );
 }
 
