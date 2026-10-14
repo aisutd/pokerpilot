@@ -19,6 +19,7 @@ from engine.bots import DIFFICULTIES
 from engine.game import GameError, Table
 
 STATIC_DIR = Path(__file__).parent / 'static'
+CHAT_BUILD_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
 MAX_MATCHES = 500
 IDLE_SECONDS = 6 * 60 * 60
 
@@ -27,6 +28,7 @@ app.secret_key = os.environ.get('POKERPILOT_SECRET') or secrets.token_hex(32)
 
 matches: dict[str, tuple[Table, float]] = {}
 matches_lock = threading.Lock()
+match_chat_rooms: dict[str, str] = {}
 
 
 def prune() -> None:
@@ -37,10 +39,12 @@ def prune() -> None:
     for key, (_, seen) in list(matches.items()):
         if now - seen > IDLE_SECONDS:
             del matches[key]
+            match_chat_rooms.pop(key, None)
 
     while len(matches) >= MAX_MATCHES:
         oldest = min(matches, key=lambda key: matches[key][1])
         del matches[oldest]
+        match_chat_rooms.pop(oldest, None)
 
 
 def current_match() -> Table:
@@ -67,6 +71,35 @@ def index():
     return send_from_directory(STATIC_DIR, 'index.html')
 
 
+@app.get('/chat')
+@app.get('/chat/')
+def chat_index():
+    return send_from_directory(CHAT_BUILD_DIR, 'index.html')
+
+
+@app.get('/chat/<path:filename>')
+def chat_asset(filename: str):
+    return send_from_directory(CHAT_BUILD_DIR, filename)
+
+
+@app.get('/api/chat-room')
+def chat_room():
+    match_id = session.get('match_id')
+
+    with matches_lock:
+        entry = matches.get(match_id) if match_id else None
+        if entry is None:
+            return jsonify({'error': 'Start a game before opening table chat.'}), 400
+
+        matches[match_id] = (entry[0], time.time())
+        room_id = match_chat_rooms.get(match_id)
+        if room_id is None:
+            room_id = secrets.token_urlsafe(24)
+            match_chat_rooms[match_id] = room_id
+
+    return jsonify({'room': room_id})
+
+
 @app.post('/api/new')
 def new_match():
     payload = request.get_json(silent=True) or {}
@@ -81,6 +114,7 @@ def new_match():
     with matches_lock:
         prune()
         matches[match_id] = (match, time.time())
+        match_chat_rooms[match_id] = secrets.token_urlsafe(24)
 
     session['match_id'] = match_id
 

@@ -15,6 +15,7 @@ let view = null;
 let busy = false;
 let epoch = 0; // bumped when leaving the table, to cancel animations
 let seatEls = null;
+let chatRequest = 0;
 
 // ------------------------------------------------------------- helpers
 
@@ -76,6 +77,75 @@ function showError(message) {
     $(id).textContent = message || '';
   }
 }
+
+async function connectChat() {
+  const requestId = ++chatRequest;
+  const room = await api('/api/chat-room');
+  if (requestId !== chatRequest || $('game').hidden) return;
+
+  const frame = $('chat-frame');
+  $('chat-widget').hidden = false;
+  frame.src = `${frame.dataset.src}?room=${encodeURIComponent(room.room)}`;
+}
+
+function disconnectChat() {
+  chatRequest += 1;
+  $('chat-frame').src = 'about:blank';
+  $('chat-widget').hidden = true;
+}
+
+function setupChatControls() {
+  const widget = $('chat-widget');
+  const handle = $('chat-drag-handle');
+  let drag = null;
+
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest('button')) return;
+    const rect = widget.getBoundingClientRect();
+    widget.style.left = `${rect.left}px`;
+    widget.style.top = `${rect.top}px`;
+    widget.style.right = 'auto';
+    widget.style.bottom = 'auto';
+    drag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top };
+    handle.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const left = Math.max(0, Math.min(window.innerWidth - widget.offsetWidth, drag.left + event.clientX - drag.x));
+    const top = Math.max(0, Math.min(window.innerHeight - widget.offsetHeight, drag.top + event.clientY - drag.y));
+    widget.style.left = `${left}px`;
+    widget.style.top = `${top}px`;
+  });
+
+  const stopDragging = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    drag = null;
+  };
+  handle.addEventListener('pointerup', stopDragging);
+  handle.addEventListener('pointercancel', stopDragging);
+
+  $('chat-minimize').addEventListener('click', () => {
+    const content = $('chat-widget-content');
+    const minimized = !content.hidden;
+    content.hidden = minimized;
+    $('chat-minimize').setAttribute('aria-expanded', String(!minimized));
+    $('chat-minimize').setAttribute('aria-label', minimized ? 'Expand table chat' : 'Minimize table chat');
+    $('chat-minimize').textContent = minimized ? '+' : '−';
+  });
+
+  window.addEventListener('resize', () => {
+    if (!widget.style.left) return;
+    const left = Math.max(0, Math.min(window.innerWidth - widget.offsetWidth, widget.offsetLeft));
+    const top = Math.max(0, Math.min(window.innerHeight - widget.offsetHeight, widget.offsetTop));
+    widget.style.left = `${left}px`;
+    widget.style.top = `${top}px`;
+  });
+}
+
+setupChatControls();
 
 // --------------------------------------------------------------- cards
 
@@ -227,6 +297,9 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const difficulty = v.difficulty[0].toUpperCase() + v.difficulty.slice(1);
   $('street').textContent = `${v.hand_over ? 'Hand over' : v.street} · ${difficulty}`;
+  const chatPlayers = v.seats.map((seat) => seat.name).join(' · ');
+  $('chat-player-names').textContent = chatPlayers;
+  $('chat-player-names').title = chatPlayers;
 
   renderSeats(v, thinking);
 
@@ -441,6 +514,7 @@ async function send(path, body) {
 
 async function startGame(difficulty) {
   if (busy) return;
+  disconnectChat();
   busy = true;
   showError(null);
   showScreen('loading');
@@ -452,6 +526,7 @@ async function startGame(difficulty) {
   try {
     [response] = await Promise.all([api('/api/new', { difficulty }), sleep(LOADING_MIN_MS)]);
     showScreen('game');
+    connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     await playFrames(response.frames, myEpoch);
   } catch (error) {
     if (!response) {
@@ -539,6 +614,7 @@ $('history-close').addEventListener('click', () => toggleHistory(false));
 function toLobby() {
   epoch += 1;
   busy = false;
+  disconnectChat();
   toggleHistory(false);
   showScreen('lobby');
   showError(null);
@@ -569,6 +645,7 @@ api('/api/state')
     if (data && data.view) {
       showScreen('game');
       render(data.view);
+      connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     }
   })
   .catch(() => { /* no game yet: stay in the lobby */ });

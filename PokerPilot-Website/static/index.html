@@ -224,6 +224,16 @@
     </div>
   </div>
 
+  <aside class="chat-widget" id="chat-widget" hidden aria-label="Multiplayer chat">
+    <header class="chat-widget-header" id="chat-drag-handle">
+      <span class="chat-player-names" id="chat-player-names">Players at this table</span>
+      <button id="chat-minimize" type="button" aria-label="Minimize chat" aria-expanded="true">&minus;</button>
+    </header>
+    <div class="chat-widget-content" id="chat-widget-content">
+      <iframe id="chat-frame" title="Multiplayer poker chat" src="about:blank" data-src="/chat/"></iframe>
+    </div>
+  </aside>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

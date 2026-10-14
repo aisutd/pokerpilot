@@ -7,15 +7,27 @@ and hand ranking) are handled by
 
 ## Run it
 
-Requires Python 3.11+ (pokerkit needs 3.11 or newer).
+Requires Python 3.11+ (pokerkit needs 3.11 or newer), Node.js 20.19+ and npm.
 
 **Windows:** double-click `start.bat`. It sets everything up the first time,
-starts the server and opens <http://127.0.0.1:5000>. Close the black window
-to stop it. Or manually:
+builds the chat UI, starts the WebSocket chat service and website, then opens
+<http://127.0.0.1:5000>. Or manually:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
+cd ..\client
+npm install
+npm run build
+cd ..\chat-api
+npm install
+npm start
+```
+
+In a second terminal:
+
+```powershell
+cd PokerPilot-Website
 .venv\Scripts\python app.py
 ```
 
@@ -24,14 +36,29 @@ python -m venv .venv
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+cd ../client
+npm install
+npm run build
+cd ../chat-api
+npm install
+npm start
+```
+
+In a second terminal:
+
+```bash
+cd PokerPilot-Website
 .venv/bin/python app.py
 ```
 
 Then open <http://127.0.0.1:5000>. The server also listens on your local
 network, so phones on the same Wi-Fi can open `http://<your computer's IP>:5000`.
+The chat API listens on port 3000. Set `VITE_CHAT_WS_URL` before building the
+client if the WebSocket server is hosted at a different URL.
 
-Run the tests with `python -m unittest tests.test_game` (from this folder,
-inside the virtual environment).
+Run the poker tests with `python -m unittest tests.test_game tests.test_chat_room`
+(from this folder, inside the virtual environment), and the chat relay test
+with `npm test --prefix ../chat-api`.
 
 ## How to play
 
@@ -48,6 +75,11 @@ inside the virtual environment).
 
 The numbers under each player are: % of hands played voluntarily / % of
 hands raised before the flop / hands won. **History** shows the hand log.
+The draggable **Chat with fellow Pokermates** window opens in the lower-right
+corner while a game is active. It uses the React chat UI and WebSocket API
+from the `websockets` branch, including emoji selection. Each game gets a
+private chat room; chat messages are only broadcast to clients connected to
+that game's room.
 
 ## Difficulty
 
@@ -71,6 +103,8 @@ app.py            Flask server and JSON API
 engine/game.py    6-max table logic on top of pokerkit's State
 engine/bots.py    AI players (skill levels and personalities)
 static/           Lobby, loading screen and table (HTML/CSS/JS, no build step)
+../client/        React chat UI (built into client/dist for Flask to serve)
+../chat-api/      Node.js WebSocket chat relay (port 3000)
 tests/            Engine tests (python -m unittest)
 start.bat         One-click launcher for Windows
 ```
