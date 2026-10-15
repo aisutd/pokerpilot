@@ -1,0 +1,18 @@
+              precision    recall  f1-score   support
+
+        fold      0.933     0.889     0.910       592
+       check      0.893     0.807     0.848        83
+        call      0.384     0.549     0.452       102
+         bet      0.704     0.826     0.760        46
+       raise      0.667     0.574     0.617       115
+
+    accuracy                          0.803       938
+   macro avg      0.716     0.729     0.717       938
+weighted avg      0.826     0.803     0.811       938
+
+       fold  check  call  bet  raise
+fold    526      0    57    0      9
+check     0     67     0   16      0
+call     22      0    56    0     24
+bet       0      8     0   38      0
+raise    16      0    33    0     66

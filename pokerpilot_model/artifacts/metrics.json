@@ -1,0 +1,72 @@
+{
+  "test_winning_players": {
+    "accuracy": 0.802771855010661,
+    "macro_f1": 0.7173142402062516,
+    "log_loss": 0.4921522454007706
+  },
+  "test_all_players": {
+    "accuracy": 0.7943071965628357,
+    "macro_f1": 0.6978970468125439,
+    "log_loss": 0.5102744422739321
+  },
+  "winning_players": [
+    "P03",
+    "P04",
+    "P05",
+    "P11",
+    "P12",
+    "P15",
+    "P16",
+    "P17",
+    "P18",
+    "P19"
+  ],
+  "baselines": {
+    "always_fold_accuracy": 0.6311300639658849,
+    "fold_or_check_rule_accuracy": 0.7196162046908315,
+    "fold_or_check_rule_macro_f1": 0.32562590063701136
+  },
+  "by_street": {
+    "Preflop": {
+      "rows": 769,
+      "accuracy": 0.8075422626788037,
+      "macro_f1": 0.7193480841947681
+    },
+    "Flop": {
+      "rows": 84,
+      "accuracy": 0.7738095238095238,
+      "macro_f1": 0.6102662199208042
+    },
+    "Turn": {
+      "rows": 50,
+      "accuracy": 0.7,
+      "macro_f1": 0.6341157580854805
+    },
+    "River": {
+      "rows": 35,
+      "accuracy": 0.9142857142857143,
+      "macro_f1": 0.7546688605512135
+    }
+  },
+  "sizing_mae_pot_frac": 0.1622331137508541,
+  "sizing_baseline_mae": 0.44000649350649346,
+  "best_params": {
+    "max_depth": 3,
+    "learning_rate": 0.08,
+    "min_child_weight": 5,
+    "subsample": 0.9,
+    "colsample_bytree": 0.7,
+    "reg_lambda": 3.0,
+    "reg_alpha": 0.0,
+    "gamma": 0.5,
+    "weight_power": 0.5
+  },
+  "n_trees": 188,
+  "classes": [
+    "fold",
+    "check",
+    "call",
+    "bet",
+    "raise"
+  ]
+}
