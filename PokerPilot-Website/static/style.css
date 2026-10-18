@@ -435,6 +435,27 @@ button:focus-visible, input:focus-visible {
 
 .hand-strength:empty { display: none; }
 
+.dqn-advisor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 0 12px;
+}
+
+.dqn-advisor button {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 12px;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dqn-advisor button:disabled { opacity: .55; cursor: not-allowed; }
+.dqn-advisor p { margin: 0; color: var(--muted); font-size: .9rem; }
+
 .action-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1.55fr .85fr;

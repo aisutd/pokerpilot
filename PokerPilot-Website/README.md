@@ -56,7 +56,8 @@ network, so phones on the same Wi-Fi can open `http://<your computer's IP>:5000`
 The chat API listens on port 3000. Set `VITE_CHAT_WS_URL` before building the
 client if the WebSocket server is hosted at a different URL.
 
-Run the poker tests with `python -m unittest tests.test_game tests.test_chat_room`
+Run the poker and DQN tests with
+`python -m unittest tests.test_game tests.test_chat_room tests.test_dqn_model`
 (from this folder, inside the virtual environment), and the chat relay test
 with `npm test --prefix ../chat-api`.
 
@@ -117,11 +118,23 @@ Amounts are integer cents.
 |--------|---------------|------|
 | POST   | `/api/new`    | `{"difficulty": "easy\|medium\|hard"}` |
 | GET    | `/api/state`  | none |
+| POST   | `/api/advice` | `{}` (requires a trained DQN checkpoint) |
 | POST   | `/api/action` | `{"action": "fold\|check_call\|raise", "amount": 4500}` |
 | POST   | `/api/next`   | none (deals the next hand) |
 
-Each POST returns `{"frames": [...], "view": {...}}`: one frame per AI
-action so the page can animate them, then the final state.
+Game actions return `{"frames": [...], "view": {...}}`: one frame per AI
+action so the page can animate them, then the final state. `/api/advice` returns
+`{"action": ..., "amount": ..., "label": ..., "q_value_bb": ...}`.
+
+The DQN training, evaluation, and environment adapter are in
+[`dqn_model_surya/`](./dqn_model_surya/). Train it and run its 10,000-hand
+held-out evaluation as described in that folder's README. The advisor endpoint
+then serves its recommendation separately from the existing player-to-player
+WebSocket chat service. The poker engine remains unchanged.
+
+The website's **Ask AI Advisor** button requires a trained checkpoint; before
+training, it returns a clear unavailable response rather than a fabricated
+recommendation.
 
 Games are kept in server memory and are lost when the server restarts. For
 a deployment, set `POKERPILOT_SECRET` so session cookies survive restarts,

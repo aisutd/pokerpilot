@@ -16,10 +16,11 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, session
 
 from engine.bots import DIFFICULTIES
-from engine.game import GameError, Table
+from engine.game import HUMAN_SEAT, GameError, Table
 
 STATIC_DIR = Path(__file__).parent / 'static'
 CHAT_BUILD_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
+ADVISOR_CHECKPOINT = Path(__file__).parent / 'dqn_model_surya' / 'checkpoints' / 'pokerpilot_dqn.pt'
 MAX_MATCHES = 500
 IDLE_SECONDS = 6 * 60 * 60
 
@@ -131,6 +132,59 @@ def state():
 
     with match.lock:
         return jsonify({'frames': [], 'view': match.view()})
+
+
+@app.post('/api/advice')
+def advice():
+    match = current_match()
+
+    with match.lock:
+        if match.actor_seat != HUMAN_SEAT:
+            raise GameError('The AI advisor is available only on your turn.')
+        if not ADVISOR_CHECKPOINT.is_file():
+            return jsonify({
+                'error': 'No trained DQN checkpoint is installed. Train the agent first.',
+            }), 503
+
+        try:
+            from dqn_model_surya.env import (
+                ACTION_NAMES,
+                action_to_engine_action,
+                legal_action_mask,
+                observation_from_table,
+            )
+            from dqn_model_surya.model import choose_greedy_action, load_policy
+        except ImportError:
+            app.logger.exception('PyTorch or the DQN advisor package is unavailable.')
+            return jsonify({'error': 'The DQN advisor dependencies are not installed.'}), 503
+
+        network, metadata = load_policy(
+            str(ADVISOR_CHECKPOINT),
+            ADVISOR_CHECKPOINT.stat().st_mtime_ns,
+        )
+        state_vector = observation_from_table(match)
+        if (
+                metadata.get('state_size') != len(state_vector)
+                or metadata.get('action_count') != len(ACTION_NAMES)
+                or metadata.get('action_names') != list(ACTION_NAMES)
+        ):
+            raise RuntimeError('The trained DQN checkpoint uses incompatible state/actions.')
+        mask = legal_action_mask(match)
+        chosen, q_values = choose_greedy_action(network, state_vector, mask)
+        action, amount = action_to_engine_action(match, chosen)
+        if action == 'fold':
+            label = 'Fold'
+        elif action == 'check_call':
+            label = 'Check / Call'
+        else:
+            label = f'Raise to ${amount / 100:,.2f}'
+
+        return jsonify({
+            'action': action,
+            'amount': amount,
+            'label': label,
+            'q_value_bb': q_values[chosen],
+        })
 
 
 @app.post('/api/action')

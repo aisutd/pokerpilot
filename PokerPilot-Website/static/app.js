@@ -16,6 +16,8 @@ let busy = false;
 let epoch = 0; // bumped when leaving the table, to cancel animations
 let seatEls = null;
 let chatRequest = 0;
+let adviceRequest = 0;
+let adviceBusy = false;
 
 // ------------------------------------------------------------- helpers
 
@@ -76,6 +78,14 @@ function showError(message) {
     $(id).hidden = !message;
     $(id).textContent = message || '';
   }
+}
+
+function clearAdvice() {
+  adviceRequest += 1;
+  adviceBusy = false;
+  $('dqn-advice-result').hidden = true;
+  $('dqn-advice-result').textContent = '';
+  $('dqn-advice').textContent = 'Ask AI Advisor';
 }
 
 async function connectChat() {
@@ -365,6 +375,7 @@ function renderControls(v, animating, thinking) {
   const legal = !animating && !busy ? v.legal : null;
   $('actions').hidden = !legal;
   $('hand-done').hidden = animating || busy || !v.hand_over || v.game_over;
+  $('dqn-advice').disabled = !legal || adviceBusy;
 
   const waiting = $('waiting');
   waiting.hidden = Boolean(legal) || (v.hand_over && !animating && !busy);
@@ -485,6 +496,7 @@ async function resync() {
 
 async function send(path, body) {
   if (busy) return;
+  clearAdvice();
   busy = true;
   showError(null);
 
@@ -514,6 +526,7 @@ async function send(path, body) {
 
 async function startGame(difficulty) {
   if (busy) return;
+  clearAdvice();
   disconnectChat();
   busy = true;
   showError(null);
@@ -559,6 +572,35 @@ function act(action) {
   send('/api/action', { action });
 }
 
+async function requestAdvice() {
+  if (adviceBusy || busy || !view || !view.legal) return;
+  const requestId = ++adviceRequest;
+  adviceBusy = true;
+  busy = true;
+  $('dqn-advice').textContent = 'Thinking…';
+  $('dqn-advice-result').hidden = true;
+  render(view);
+  $('waiting').textContent = 'AI advisor is thinking…';
+  showError(null);
+
+  try {
+    const recommendation = await api('/api/advice', {});
+    if (requestId !== adviceRequest) return;
+    $('dqn-advice-result').textContent =
+      `${recommendation.label} · estimated Q-value ${recommendation.q_value_bb.toFixed(2)} BB`;
+    $('dqn-advice-result').hidden = false;
+  } catch (error) {
+    if (requestId === adviceRequest) showError(`AI advisor unavailable: ${error.message}`);
+  } finally {
+    if (requestId === adviceRequest) {
+      adviceBusy = false;
+      busy = false;
+      $('dqn-advice').textContent = 'Ask AI Advisor';
+      if (view) render(view);
+    }
+  }
+}
+
 document.querySelectorAll('#lobby .mode').forEach((button) => {
   button.addEventListener('click', () => startGame(button.dataset.difficulty));
 });
@@ -566,6 +608,7 @@ document.querySelectorAll('#lobby .mode').forEach((button) => {
 $('btn-fold').addEventListener('click', () => act('fold'));
 $('btn-call').addEventListener('click', () => act('check_call'));
 $('btn-raise').addEventListener('click', () => act('raise'));
+$('dqn-advice').addEventListener('click', requestAdvice);
 $('next-hand').addEventListener('click', () => send('/api/next', {}));
 $('play-again').addEventListener('click', () => startGame(view.difficulty));
 
@@ -613,6 +656,7 @@ $('history-close').addEventListener('click', () => toggleHistory(false));
 
 function toLobby() {
   epoch += 1;
+  clearAdvice();
   busy = false;
   disconnectChat();
   toggleHistory(false);
