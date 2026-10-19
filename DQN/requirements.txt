@@ -1,0 +1,4 @@
+torch>=2.2
+numpy>=1.26
+pandas>=2.1
+pokerkit==0.7.6

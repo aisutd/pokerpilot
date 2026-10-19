@@ -1,0 +1,812 @@
+{
+  "hands": 1000,
+  "test_seed": 50000,
+  "simulator": {
+    "random": {
+      "heroes": {
+        "random": {
+          "hands": 1000,
+          "bb_per_100": -137.53499999999997,
+          "ci95_bb_per_100": 693.6492597810275,
+          "total_bb": -1375.3499999999997,
+          "std_bb_per_hand": 111.9138550100957,
+          "vpip": 0.71,
+          "pfr": 0.446,
+          "showdown_rate": 0.526,
+          "decisions": 1478,
+          "action_distribution": {
+            "fold": 0.31055480378890393,
+            "check": 0.015561569688768605,
+            "call": 0.32882273342354534,
+            "raise_half": 0.09945872801082543,
+            "raise_pot": 0.09133964817320704,
+            "all_in": 0.15426251691474965
+          }
+        },
+        "calling_station": {
+          "hands": 1000,
+          "bb_per_100": 692.195,
+          "ci95_bb_per_100": 962.9038975813431,
+          "total_bb": 6921.950000000001,
+          "std_bb_per_hand": 155.3555859291093,
+          "vpip": 0.998,
+          "pfr": 0.0,
+          "showdown_rate": 1.0,
+          "decisions": 2215,
+          "action_distribution": {
+            "fold": 0.0,
+            "check": 0.09390519187358916,
+            "call": 0.9060948081264109,
+            "raise_half": 0.0,
+            "raise_pot": 0.0,
+            "all_in": 0.0
+          }
+        },
+        "rule_based": {
+          "hands": 1000,
+          "bb_per_100": 355.14,
+          "ci95_bb_per_100": 351.8131645149582,
+          "total_bb": 3551.4,
+          "std_bb_per_hand": 56.76178115810179,
+          "vpip": 0.203,
+          "pfr": 0.072,
+          "showdown_rate": 0.084,
+          "decisions": 1171,
+          "action_distribution": {
+            "fold": 0.7822374039282665,
+            "check": 0.006831767719897523,
+            "call": 0.14517506404782238,
+            "raise_half": 0.0008539709649871904,
+            "raise_pot": 0.05550811272416738,
+            "all_in": 0.009393680614859094
+          }
+        },
+        "dqn:scratch/online_best": {
+          "hands": 1000,
+          "bb_per_100": 715.442,
+          "ci95_bb_per_100": 557.6124321084087,
+          "total_bb": 7154.42,
+          "std_bb_per_hand": 89.96557842288664,
+          "vpip": 0.626,
+          "pfr": 0.248,
+          "showdown_rate": 0.295,
+          "decisions": 1653,
+          "action_distribution": {
+            "fold": 0.41742286751361163,
+            "check": 0.019358741681790685,
+            "call": 0.38656987295825773,
+            "raise_half": 0.08348457350272233,
+            "raise_pot": 0.03145795523290986,
+            "all_in": 0.06170598911070781
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "hands": 1000,
+          "bb_per_100": 368.35099999999994,
+          "ci95_bb_per_100": 403.2112768409549,
+          "total_bb": 3683.5099999999998,
+          "std_bb_per_hand": 65.05438842255711,
+          "vpip": 0.512,
+          "pfr": 0.344,
+          "showdown_rate": 0.162,
+          "decisions": 1576,
+          "action_distribution": {
+            "fold": 0.5260152284263959,
+            "check": 0.010786802030456852,
+            "call": 0.19733502538071065,
+            "raise_half": 0.1383248730964467,
+            "raise_pot": 0.08629441624365482,
+            "all_in": 0.041243654822335024
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "hands": 1000,
+          "bb_per_100": 69.314,
+          "ci95_bb_per_100": 128.30123315820595,
+          "total_bb": 693.14,
+          "std_bb_per_hand": 20.700210376951485,
+          "vpip": 0.058,
+          "pfr": 0.033,
+          "showdown_rate": 0.013,
+          "decisions": 1067,
+          "action_distribution": {
+            "fold": 0.9250234301780693,
+            "check": 0.007497656982193065,
+            "call": 0.03655107778819119,
+            "raise_half": 0.0,
+            "raise_pot": 0.030927835051546393,
+            "all_in": 0.0
+          }
+        }
+      },
+      "paired": {
+        "dqn:scratch/online_best": {
+          "random": {
+            "bb_per_100": 852.9770000000001,
+            "ci95_bb_per_100": 755.9964681194743
+          },
+          "calling_station": {
+            "bb_per_100": 23.247000000000092,
+            "ci95_bb_per_100": 885.4427287583112
+          },
+          "rule_based": {
+            "bb_per_100": 360.30199999999996,
+            "ci95_bb_per_100": 582.5183646331951
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "random": {
+            "bb_per_100": 505.88599999999985,
+            "ci95_bb_per_100": 701.941557278009
+          },
+          "calling_station": {
+            "bb_per_100": -323.84399999999994,
+            "ci95_bb_per_100": 954.190255309612
+          },
+          "rule_based": {
+            "bb_per_100": 13.21099999999999,
+            "ci95_bb_per_100": 459.9879605247954
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "random": {
+            "bb_per_100": 206.84899999999993,
+            "ci95_bb_per_100": 698.6792209212463
+          },
+          "calling_station": {
+            "bb_per_100": -622.881,
+            "ci95_bb_per_100": 957.1771603293481
+          },
+          "rule_based": {
+            "bb_per_100": -285.82599999999996,
+            "ci95_bb_per_100": 322.2341103047056
+          }
+        }
+      }
+    },
+    "calling_station": {
+      "heroes": {
+        "random": {
+          "hands": 1000,
+          "bb_per_100": -731.7219999999999,
+          "ci95_bb_per_100": 992.7353603281775,
+          "total_bb": -7317.219999999999,
+          "std_bb_per_hand": 160.16861491964298,
+          "vpip": 0.797,
+          "pfr": 0.621,
+          "showdown_rate": 0.84,
+          "decisions": 2441,
+          "action_distribution": {
+            "fold": 0.06554690700532569,
+            "check": 0.1896763621466612,
+            "call": 0.07210159770585825,
+            "raise_half": 0.2183531339614912,
+            "raise_pot": 0.19377304383449406,
+            "all_in": 0.2605489553461696
+          }
+        },
+        "calling_station": {
+          "hands": 1000,
+          "bb_per_100": -11.0,
+          "ci95_bb_per_100": 12.918532690940054,
+          "total_bb": -110.0,
+          "std_bb_per_hand": 2.0842850678936036,
+          "vpip": 0.834,
+          "pfr": 0.0,
+          "showdown_rate": 1.0,
+          "decisions": 4000,
+          "action_distribution": {
+            "fold": 0.0,
+            "check": 0.7915,
+            "call": 0.2085,
+            "raise_half": 0.0,
+            "raise_pot": 0.0,
+            "all_in": 0.0
+          }
+        },
+        "rule_based": {
+          "hands": 1000,
+          "bb_per_100": 1761.561,
+          "ci95_bb_per_100": 629.8911197749096,
+          "total_bb": 17615.61,
+          "std_bb_per_hand": 101.62707226544089,
+          "vpip": 0.37,
+          "pfr": 0.185,
+          "showdown_rate": 0.499,
+          "decisions": 2476,
+          "action_distribution": {
+            "fold": 0.20234248788368336,
+            "check": 0.4648626817447496,
+            "call": 0.0747172859450727,
+            "raise_half": 0.058562197092084003,
+            "raise_pot": 0.16720516962843296,
+            "all_in": 0.03231017770597738
+          }
+        },
+        "dqn:scratch/online_best": {
+          "hands": 1000,
+          "bb_per_100": 3665.33,
+          "ci95_bb_per_100": 986.4066887229168,
+          "total_bb": 36653.3,
+          "std_bb_per_hand": 159.1475426320992,
+          "vpip": 0.722,
+          "pfr": 0.522,
+          "showdown_rate": 0.885,
+          "decisions": 3186,
+          "action_distribution": {
+            "fold": 0.03609541745134966,
+            "check": 0.6167608286252354,
+            "call": 0.06277463904582549,
+            "raise_half": 0.12523540489642185,
+            "raise_pot": 0.05084745762711865,
+            "all_in": 0.10828625235404897
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "hands": 1000,
+          "bb_per_100": 3839.5360000000005,
+          "ci95_bb_per_100": 991.5003552557366,
+          "total_bb": 38395.36,
+          "std_bb_per_hand": 159.9693583405218,
+          "vpip": 0.769,
+          "pfr": 0.264,
+          "showdown_rate": 0.926,
+          "decisions": 3527,
+          "action_distribution": {
+            "fold": 0.020981003685851998,
+            "check": 0.6138361213495889,
+            "call": 0.1431811738020981,
+            "raise_half": 0.0779699461298554,
+            "raise_pot": 0.05216898213779416,
+            "all_in": 0.09186277289481146
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "hands": 1000,
+          "bb_per_100": 684.92,
+          "ci95_bb_per_100": 341.3932741911661,
+          "total_bb": 6849.2,
+          "std_bb_per_hand": 55.080628791146054,
+          "vpip": 0.14,
+          "pfr": 0.115,
+          "showdown_rate": 0.299,
+          "decisions": 1896,
+          "action_distribution": {
+            "fold": 0.3697257383966245,
+            "check": 0.5021097046413502,
+            "call": 0.013185654008438819,
+            "raise_half": 0.03481012658227848,
+            "raise_pot": 0.07647679324894514,
+            "all_in": 0.003691983122362869
+          }
+        }
+      },
+      "paired": {
+        "dqn:scratch/online_best": {
+          "random": {
+            "bb_per_100": 4397.052000000001,
+            "ci95_bb_per_100": 713.1002950340174
+          },
+          "calling_station": {
+            "bb_per_100": 3676.33,
+            "ci95_bb_per_100": 975.290355311658
+          },
+          "rule_based": {
+            "bb_per_100": 1903.7690000000002,
+            "ci95_bb_per_100": 733.1633438675009
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "random": {
+            "bb_per_100": 4571.258,
+            "ci95_bb_per_100": 669.876327607762
+          },
+          "calling_station": {
+            "bb_per_100": 3850.5360000000005,
+            "ci95_bb_per_100": 980.2490459609436
+          },
+          "rule_based": {
+            "bb_per_100": 2077.975,
+            "ci95_bb_per_100": 762.8982067050861
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "random": {
+            "bb_per_100": 1416.6420000000003,
+            "ci95_bb_per_100": 917.5590649000039
+          },
+          "calling_station": {
+            "bb_per_100": 695.92,
+            "ci95_bb_per_100": 336.47554500037745
+          },
+          "rule_based": {
+            "bb_per_100": -1076.641,
+            "ci95_bb_per_100": 486.67127383470944
+          }
+        }
+      }
+    },
+    "rule_based": {
+      "heroes": {
+        "random": {
+          "hands": 1000,
+          "bb_per_100": -588.966,
+          "ci95_bb_per_100": 242.2581153924694,
+          "total_bb": -5889.66,
+          "std_bb_per_hand": 39.0860931785765,
+          "vpip": 0.785,
+          "pfr": 0.64,
+          "showdown_rate": 0.183,
+          "decisions": 1566,
+          "action_distribution": {
+            "fold": 0.16538952745849297,
+            "check": 0.05683269476372925,
+            "call": 0.16091954022988506,
+            "raise_half": 0.20945083014048532,
+            "raise_pot": 0.1826309067688378,
+            "all_in": 0.2247765006385696
+          }
+        },
+        "calling_station": {
+          "hands": 1000,
+          "bb_per_100": -1611.001,
+          "ci95_bb_per_100": 311.50757430889666,
+          "total_bb": -16110.01,
+          "std_bb_per_hand": 50.25884914338088,
+          "vpip": 0.949,
+          "pfr": 0.0,
+          "showdown_rate": 0.985,
+          "decisions": 4860,
+          "action_distribution": {
+            "fold": 0.0,
+            "check": 0.4388888888888889,
+            "call": 0.5611111111111111,
+            "raise_half": 0.0,
+            "raise_pot": 0.0,
+            "all_in": 0.0
+          }
+        },
+        "rule_based": {
+          "hands": 1000,
+          "bb_per_100": 146.469,
+          "ci95_bb_per_100": 126.82468390520467,
+          "total_bb": 1464.69,
+          "std_bb_per_hand": 20.46198289139515,
+          "vpip": 0.309,
+          "pfr": 0.139,
+          "showdown_rate": 0.076,
+          "decisions": 1484,
+          "action_distribution": {
+            "fold": 0.5336927223719676,
+            "check": 0.17857142857142858,
+            "call": 0.1320754716981132,
+            "raise_half": 0.02628032345013477,
+            "raise_pot": 0.12196765498652291,
+            "all_in": 0.007412398921832884
+          }
+        },
+        "dqn:scratch/online_best": {
+          "hands": 1000,
+          "bb_per_100": -270.859,
+          "ci95_bb_per_100": 215.314871936181,
+          "total_bb": -2708.5899999999997,
+          "std_bb_per_hand": 34.73905150131637,
+          "vpip": 0.939,
+          "pfr": 0.62,
+          "showdown_rate": 0.18,
+          "decisions": 2210,
+          "action_distribution": {
+            "fold": 0.09457013574660633,
+            "check": 0.1665158371040724,
+            "call": 0.24796380090497738,
+            "raise_half": 0.2244343891402715,
+            "raise_pot": 0.1411764705882353,
+            "all_in": 0.1253393665158371
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "hands": 1000,
+          "bb_per_100": -42.481000000000016,
+          "ci95_bb_per_100": 187.58395409357638,
+          "total_bb": -424.8100000000001,
+          "std_bb_per_hand": 30.264925889600377,
+          "vpip": 0.939,
+          "pfr": 0.646,
+          "showdown_rate": 0.115,
+          "decisions": 2248,
+          "action_distribution": {
+            "fold": 0.09074733096085409,
+            "check": 0.12633451957295375,
+            "call": 0.23754448398576514,
+            "raise_half": 0.22686832740213522,
+            "raise_pot": 0.2362099644128114,
+            "all_in": 0.08229537366548043
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "hands": 1000,
+          "bb_per_100": 34.407,
+          "ci95_bb_per_100": 57.84954622717011,
+          "total_bb": 344.07,
+          "std_bb_per_hand": 9.33348610638051,
+          "vpip": 0.157,
+          "pfr": 0.07,
+          "showdown_rate": 0.05,
+          "decisions": 1310,
+          "action_distribution": {
+            "fold": 0.6572519083969466,
+            "check": 0.14885496183206107,
+            "call": 0.11374045801526718,
+            "raise_half": 0.010687022900763359,
+            "raise_pot": 0.06641221374045801,
+            "all_in": 0.0030534351145038168
+          }
+        }
+      },
+      "paired": {
+        "dqn:scratch/online_best": {
+          "random": {
+            "bb_per_100": 318.107,
+            "ci95_bb_per_100": 266.287707065674
+          },
+          "calling_station": {
+            "bb_per_100": 1340.142,
+            "ci95_bb_per_100": 304.4535852885274
+          },
+          "rule_based": {
+            "bb_per_100": -417.3280000000001,
+            "ci95_bb_per_100": 234.4745166306925
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "random": {
+            "bb_per_100": 546.485,
+            "ci95_bb_per_100": 260.5339876461635
+          },
+          "calling_station": {
+            "bb_per_100": 1568.52,
+            "ci95_bb_per_100": 291.9877844930718
+          },
+          "rule_based": {
+            "bb_per_100": -188.95000000000002,
+            "ci95_bb_per_100": 205.87729210769407
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "random": {
+            "bb_per_100": 623.3729999999999,
+            "ci95_bb_per_100": 245.44291049852717
+          },
+          "calling_station": {
+            "bb_per_100": 1645.4079999999997,
+            "ci95_bb_per_100": 306.0848604264062
+          },
+          "rule_based": {
+            "bb_per_100": -112.06200000000001,
+            "ci95_bb_per_100": 123.82280698349139
+          }
+        }
+      }
+    },
+    "dataset_styles": {
+      "heroes": {
+        "random": {
+          "hands": 1000,
+          "bb_per_100": -271.0,
+          "ci95_bb_per_100": 251.63192712094266,
+          "total_bb": -2710.0,
+          "std_bb_per_hand": 40.59847049590177,
+          "vpip": 0.758,
+          "pfr": 0.629,
+          "showdown_rate": 0.179,
+          "decisions": 1521,
+          "action_distribution": {
+            "fold": 0.1761998685075608,
+            "check": 0.042077580539119,
+            "call": 0.16502301117685733,
+            "raise_half": 0.2024983563445102,
+            "raise_pot": 0.17094017094017094,
+            "all_in": 0.24326101249178173
+          }
+        },
+        "calling_station": {
+          "hands": 1000,
+          "bb_per_100": -924.396,
+          "ci95_bb_per_100": 260.86669053210767,
+          "total_bb": -9243.96,
+          "std_bb_per_hand": 42.08841366080317,
+          "vpip": 0.938,
+          "pfr": 0.0,
+          "showdown_rate": 0.969,
+          "decisions": 4900,
+          "action_distribution": {
+            "fold": 0.0,
+            "check": 0.4328571428571429,
+            "call": 0.5671428571428572,
+            "raise_half": 0.0,
+            "raise_pot": 0.0,
+            "all_in": 0.0
+          }
+        },
+        "rule_based": {
+          "hands": 1000,
+          "bb_per_100": 26.545999999999992,
+          "ci95_bb_per_100": 62.868365269362734,
+          "total_bb": 265.4599999999999,
+          "std_bb_per_hand": 10.143225868500583,
+          "vpip": 0.3,
+          "pfr": 0.117,
+          "showdown_rate": 0.037,
+          "decisions": 1435,
+          "action_distribution": {
+            "fold": 0.5790940766550523,
+            "check": 0.12822299651567945,
+            "call": 0.1554006968641115,
+            "raise_half": 0.0264808362369338,
+            "raise_pot": 0.10662020905923345,
+            "all_in": 0.004181184668989547
+          }
+        },
+        "dqn:scratch/online_best": {
+          "hands": 1000,
+          "bb_per_100": 634.8409999999999,
+          "ci95_bb_per_100": 253.9530747633158,
+          "total_bb": 6348.41,
+          "std_bb_per_hand": 40.97296607423999,
+          "vpip": 0.929,
+          "pfr": 0.577,
+          "showdown_rate": 0.195,
+          "decisions": 2372,
+          "action_distribution": {
+            "fold": 0.07251264755480608,
+            "check": 0.17074198988195616,
+            "call": 0.2963743676222597,
+            "raise_half": 0.19435075885328837,
+            "raise_pot": 0.13406408094435077,
+            "all_in": 0.13195615514333894
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "hands": 1000,
+          "bb_per_100": 459.83299999999997,
+          "ci95_bb_per_100": 241.38667793702928,
+          "total_bb": 4598.33,
+          "std_bb_per_hand": 38.94549485216975,
+          "vpip": 0.938,
+          "pfr": 0.62,
+          "showdown_rate": 0.145,
+          "decisions": 2285,
+          "action_distribution": {
+            "fold": 0.06345733041575492,
+            "check": 0.11991247264770241,
+            "call": 0.262144420131291,
+            "raise_half": 0.2262582056892779,
+            "raise_pot": 0.24332603938730854,
+            "all_in": 0.08490153172866521
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "hands": 1000,
+          "bb_per_100": 4.3870000000000005,
+          "ci95_bb_per_100": 29.742840253589765,
+          "total_bb": 43.870000000000005,
+          "std_bb_per_hand": 4.798730575708354,
+          "vpip": 0.144,
+          "pfr": 0.093,
+          "showdown_rate": 0.024,
+          "decisions": 1186,
+          "action_distribution": {
+            "fold": 0.7360876897133221,
+            "check": 0.08684654300168634,
+            "call": 0.07588532883642496,
+            "raise_half": 0.016020236087689713,
+            "raise_pot": 0.0851602023608769,
+            "all_in": 0.0
+          }
+        }
+      },
+      "paired": {
+        "dqn:scratch/online_best": {
+          "random": {
+            "bb_per_100": 905.841,
+            "ci95_bb_per_100": 315.58329659579573
+          },
+          "calling_station": {
+            "bb_per_100": 1559.2369999999999,
+            "ci95_bb_per_100": 310.0806835371272
+          },
+          "rule_based": {
+            "bb_per_100": 608.2950000000001,
+            "ci95_bb_per_100": 254.67975630198723
+          }
+        },
+        "dqn:offline_online/online_best": {
+          "random": {
+            "bb_per_100": 730.833,
+            "ci95_bb_per_100": 317.59577742521566
+          },
+          "calling_station": {
+            "bb_per_100": 1384.229,
+            "ci95_bb_per_100": 308.6390390400291
+          },
+          "rule_based": {
+            "bb_per_100": 433.287,
+            "ci95_bb_per_100": 236.25678138585494
+          }
+        },
+        "dqn:offline_online/offline_best": {
+          "random": {
+            "bb_per_100": 275.387,
+            "ci95_bb_per_100": 251.7900965664447
+          },
+          "calling_station": {
+            "bb_per_100": 928.7829999999999,
+            "ci95_bb_per_100": 259.76033569969087
+          },
+          "rule_based": {
+            "bb_per_100": -22.159,
+            "ci95_bb_per_100": 64.25246813328285
+          }
+        }
+      }
+    }
+  },
+  "offline": {
+    "dqn:scratch/online_best": {
+      "val": {
+        "n": 2023,
+        "td_loss": 0.280010849237442,
+        "agreement_with_logged": 0.15570934256055363,
+        "pearson_q_logged_vs_return": 0.11820098170731669,
+        "mean_q_logged_bb": 2.488320827484131,
+        "mean_return_bb": -0.4924517869949341,
+        "mean_q_greedy_bb": 11.551868438720703,
+        "greedy_action_distribution": {
+          "fold": 0.02768166089965398,
+          "check": 0.09243697478991597,
+          "call": 0.4132476520019773,
+          "raise_half": 0.15768660405338605,
+          "raise_pot": 0.13395946613939694,
+          "all_in": 0.1749876421156698
+        },
+        "logged_action_distribution": {
+          "fold": 0.6070192782995552,
+          "check": 0.10331191300049432,
+          "call": 0.10578348986653485,
+          "raise_half": 0.05734058329214039,
+          "raise_pot": 0.11913000494315373,
+          "all_in": 0.007414730598121601
+        }
+      },
+      "test": {
+        "n": 1862,
+        "td_loss": 0.22410424053668976,
+        "agreement_with_logged": 0.15574650912996776,
+        "pearson_q_logged_vs_return": 0.20427150731566643,
+        "mean_q_logged_bb": 3.010869026184082,
+        "mean_return_bb": -0.32070890069007874,
+        "mean_q_greedy_bb": 11.660411834716797,
+        "greedy_action_distribution": {
+          "fold": 0.02685284640171858,
+          "check": 0.08163265306122448,
+          "call": 0.4377013963480129,
+          "raise_half": 0.14715359828141783,
+          "raise_pot": 0.14070891514500536,
+          "all_in": 0.16595059076262084
+        },
+        "logged_action_distribution": {
+          "fold": 0.6342642320085929,
+          "check": 0.07733619763694952,
+          "call": 0.10580021482277122,
+          "raise_half": 0.059613319011815255,
+          "raise_pot": 0.11707841031149302,
+          "all_in": 0.005907626208378088
+        }
+      }
+    },
+    "dqn:offline_online/online_best": {
+      "val": {
+        "n": 2023,
+        "td_loss": 0.326723575592041,
+        "agreement_with_logged": 0.19278299555116163,
+        "pearson_q_logged_vs_return": 0.18113909860215854,
+        "mean_q_logged_bb": 2.415109872817993,
+        "mean_return_bb": -0.4924517869949341,
+        "mean_q_greedy_bb": 10.148358345031738,
+        "greedy_action_distribution": {
+          "fold": 0.05536332179930796,
+          "check": 0.07019278299555116,
+          "call": 0.2768166089965398,
+          "raise_half": 0.19970341077607515,
+          "raise_pot": 0.3341571922886802,
+          "all_in": 0.06376668314384577
+        },
+        "logged_action_distribution": {
+          "fold": 0.6070192782995552,
+          "check": 0.10331191300049432,
+          "call": 0.10578348986653485,
+          "raise_half": 0.05734058329214039,
+          "raise_pot": 0.11913000494315373,
+          "all_in": 0.007414730598121601
+        }
+      },
+      "test": {
+        "n": 1862,
+        "td_loss": 0.2151046246290207,
+        "agreement_with_logged": 0.17132116004296455,
+        "pearson_q_logged_vs_return": 0.17710171484434423,
+        "mean_q_logged_bb": 2.6689562797546387,
+        "mean_return_bb": -0.32070890069007874,
+        "mean_q_greedy_bb": 9.936279296875,
+        "greedy_action_distribution": {
+          "fold": 0.047261009667024706,
+          "check": 0.06390977443609022,
+          "call": 0.2932330827067669,
+          "raise_half": 0.15413533834586465,
+          "raise_pot": 0.3866809881847476,
+          "all_in": 0.05477980665950591
+        },
+        "logged_action_distribution": {
+          "fold": 0.6342642320085929,
+          "check": 0.07733619763694952,
+          "call": 0.10580021482277122,
+          "raise_half": 0.059613319011815255,
+          "raise_pot": 0.11707841031149302,
+          "all_in": 0.005907626208378088
+        }
+      }
+    },
+    "dqn:offline_online/offline_best": {
+      "val": {
+        "n": 2023,
+        "td_loss": 0.30913665890693665,
+        "agreement_with_logged": 0.77805239742956,
+        "pearson_q_logged_vs_return": 0.01633240439761928,
+        "mean_q_logged_bb": 0.6910989880561829,
+        "mean_return_bb": -0.4924517869949341,
+        "mean_q_greedy_bb": 4.099449634552002,
+        "greedy_action_distribution": {
+          "fold": 0.680177953534355,
+          "check": 0.12654473554127532,
+          "call": 0.09886307464162135,
+          "raise_half": 0.018783984181908058,
+          "raise_pot": 0.07365299060800791,
+          "all_in": 0.001977261492832427
+        },
+        "logged_action_distribution": {
+          "fold": 0.6070192782995552,
+          "check": 0.10331191300049432,
+          "call": 0.10578348986653485,
+          "raise_half": 0.05734058329214039,
+          "raise_pot": 0.11913000494315373,
+          "all_in": 0.007414730598121601
+        }
+      },
+      "test": {
+        "n": 1862,
+        "td_loss": 0.24576406180858612,
+        "agreement_with_logged": 0.7787325456498388,
+        "pearson_q_logged_vs_return": 0.1026983606019766,
+        "mean_q_logged_bb": 0.587071418762207,
+        "mean_return_bb": -0.32070890069007874,
+        "mean_q_greedy_bb": 3.9953174591064453,
+        "greedy_action_distribution": {
+          "fold": 0.7083780880773362,
+          "check": 0.10096670247046187,
+          "call": 0.0966702470461869,
+          "raise_half": 0.018259935553168637,
+          "raise_pot": 0.07465091299677766,
+          "all_in": 0.0010741138560687433
+        },
+        "logged_action_distribution": {
+          "fold": 0.6342642320085929,
+          "check": 0.07733619763694952,
+          "call": 0.10580021482277122,
+          "raise_half": 0.059613319011815255,
+          "raise_pot": 0.11707841031149302,
+          "all_in": 0.005907626208378088
+        }
+      }
+    }
+  }
+}
