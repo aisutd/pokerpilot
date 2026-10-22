@@ -30,6 +30,8 @@ targets, and post-hand outcomes are excluded. Splits are checked for game ID
 overlap. The training set fits the encoder and estimator; validation is used
 for selecting the reported checkpoint count; test is scored once after that
 selection. Results and the fitted pipeline are saved under `artifacts/`.
+Each run also creates a new timestamped Markdown report in
+`pokerpilot_model/results/`; existing run reports are left in place.
 
 ## Offline decision replay
 
@@ -40,6 +42,8 @@ python -m pokerpilot_model.simulate --data-dir Dataset --model pokerpilot_model/
 This is a deterministic decision replay against recorded labels, not a
 counterfactual poker outcome or profitability estimate. The rule baseline
 uses the recorded equity and pot odds and is evaluated on the same decisions.
+Each replay writes a separate timestamped Markdown report to
+`pokerpilot_model/results/`.
 
 ## API
 

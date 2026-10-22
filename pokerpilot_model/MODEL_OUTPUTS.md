@@ -4,6 +4,9 @@ This file records comparable evaluation outputs for PokerPilot models. Add
 future models as rows in the summary table and include their per-action
 metrics below, using the same held-out test split and label order.
 
+Each training or replay run also creates a new timestamped Markdown report in
+`pokerpilot_model/results/`. Earlier run files are retained for comparison.
+
 ## Evaluation setup
 
 | Item | Value |

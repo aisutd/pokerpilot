@@ -35,6 +35,10 @@ always-fold baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed
 per-action scores, prediction counts, and the confusion matrix are in
 [`MODEL_OUTPUTS.md`](MODEL_OUTPUTS.md).
 
+Every training or replay run also writes a separate timestamped Markdown
+report under `pokerpilot_model/results/`, preserving earlier run outputs for
+comparison.
+
 ## Setup and commands
 
 From the repository root, create an environment and install dependencies:
@@ -83,7 +87,7 @@ Run package tests:
 python -m pytest pokerpilot_model/tests -q
 ```
 
-The latest test run reported **6 passed**.
+The latest test run reported **7 passed**.
 
 ## PokerKit engine integration
 

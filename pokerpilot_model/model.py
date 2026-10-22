@@ -11,6 +11,7 @@ from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+from .baseline import baseline
 from .data import TARGET, feature_frame, feature_columns, load_splits
 
 CATEGORICAL = {"stake_level", "street", "position", "own_prev_action_street",
@@ -80,6 +81,12 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
     test_pred = [labels[int(index)] for index in selected.predict(
         feature_frame(frames["test"], columns))]
     test_result = metrics(frames["test"][TARGET], test_pred, labels)
+    baseline_labels = baseline(frames["test"])
+    majority_action = str(frames["train"][TARGET].mode().iloc[0])
+    baselines = {
+        "equity_pot_odds": metrics(frames["test"][TARGET], baseline_labels, labels),
+        "majority": metrics(frames["test"][TARGET], np.repeat(majority_action, len(frames["test"])), labels),
+    }
 
     output_dir.mkdir(parents=True, exist_ok=True)
     joblib.dump({"pipeline": selected, "columns": columns, "labels": labels,
@@ -94,7 +101,9 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
         "seed": 23, "features": columns, "labels": labels,
         "rows": {key: len(value) for key, value in frames.items()},
         "unique_games": {key: int(value.game_id.nunique()) for key, value in frames.items()},
-        "validation": val_result, "selected_estimators": best_round, "test": test_result,
+        "validation": val_result, "selected_estimators": best_round,
+        "test": test_result, "baselines": baselines,
+        "majority_action": majority_action,
     }
     (output_dir / "metrics.json").write_text(__import__("json").dumps(results, indent=2))
     return results
