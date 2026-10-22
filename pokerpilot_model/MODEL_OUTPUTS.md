@@ -16,7 +16,7 @@ Each training or replay run also creates a new timestamped Markdown report in
 | Test dates | 2026-07-16 to 2026-07-19 |
 | Actions | `all-in`, `bet`, `call`, `check`, `fold`, `raise` |
 | Estimator | XGBoost 3.4.1, seed 23 |
-| Selected boosting rounds | 200 (selected using validation macro F1) |
+| Selected settings | 150 rounds, depth 5, class-weight power 0.5 |
 | Leakage check | No game IDs overlap across train, validation, and test |
 | Model selection | Validation macro F1; test used only for final evaluation |
 
@@ -24,36 +24,38 @@ Each training or replay run also creates a new timestamped Markdown report in
 
 | Model / strategy | Test accuracy | Test macro F1 | Notes |
 | --- | ---: | ---: | --- |
-| PokerPilot XGBoost | **87.54%** | **0.7125** | Seed 23; 200 boosting rounds selected on validation |
+| PokerPilot XGBoost, class weighted | **87.43%** | **0.7415** | Seed 23; 150 rounds, depth 5 |
+| PokerPilot XGBoost, previous | 87.54% | 0.7125 | Unweighted model; 200 rounds |
 | Equity and pot-odds rule | 61.55% | 0.4162 | Uses recorded equity and pot odds |
 | Always predict `fold` | 63.43% | 0.1294 | Training majority-class baseline |
 
-Against the rule baseline, XGBoost improves test accuracy by **25.99
-percentage points** and macro F1 by **0.2963**. Against always-fold, it improves
-accuracy by **24.11 points** and macro F1 by **0.5831**.
+The class-weighted model improves macro F1 by **0.0290** (2.90 percentage
+points) over the previous XGBoost run, with a 0.11-point accuracy decrease.
+Against the rule baseline, it improves test accuracy by **25.89 percentage
+points** and macro F1 by **0.3253**.
 
 ## Split results
 
 | Split | Decisions | Accuracy | Macro F1 |
 | --- | ---: | ---: | ---: |
-| Validation | 2,023 | 87.10% | 0.7291 |
-| Test | 1,862 | 87.54% | 0.7125 |
+| Validation | 2,023 | 87.00% | 0.7486 |
+| Test | 1,862 | 87.43% | 0.7415 |
 
 ## Test metrics by action
 
 | Action | Support | Precision | Recall | F1 |
 | --- | ---: | ---: | ---: | ---: |
-| `all-in` | 13 | 1.0000 | 0.2308 | 0.3750 |
-| `bet` | 90 | 0.7159 | 0.7000 | 0.7079 |
-| `call` | 195 | 0.7314 | 0.6564 | 0.6919 |
-| `check` | 144 | 0.7792 | 0.8333 | 0.8054 |
-| `fold` | 1,181 | 0.9255 | 0.9780 | 0.9510 |
-| `raise` | 239 | 0.8299 | 0.6736 | 0.7436 |
-| **Macro average** | **1,862** | **0.8303** | **0.6787** | **0.7125** |
+| `all-in` | 13 | 0.6000 | 0.4615 | 0.5217 |
+| `bet` | 90 | 0.7030 | 0.7889 | 0.7435 |
+| `call` | 195 | 0.6734 | 0.6872 | 0.6802 |
+| `check` | 144 | 0.8201 | 0.7917 | 0.8057 |
+| `fold` | 1,181 | 0.9481 | 0.9594 | 0.9537 |
+| `raise` | 239 | 0.7798 | 0.7113 | 0.7440 |
+| **Macro average** | **1,862** | **0.7541** | **0.7333** | **0.7415** |
 
-The low `all-in` recall reflects the small test support (13 decisions). The
-strong overall accuracy should be read alongside macro F1 because `fold` is
-the dominant test label.
+The `all-in` estimate is uncertain because the test split contains only 13
+such decisions. Read accuracy alongside macro F1 because `fold` is the
+dominant test label.
 
 ## Example prediction output
 
@@ -62,23 +64,23 @@ the API predicts `fold`:
 
 | Action | Probability |
 | --- | ---: |
-| `all-in` | 0.00003 |
-| `bet` | 0.00015 |
-| `call` | 0.00768 |
-| `check` | 0.00025 |
-| `fold` | **0.97306** |
-| `raise` | 0.01882 |
+| `all-in` | 0.00029 |
+| `bet` | 0.00079 |
+| `call` | 0.02057 |
+| `check` | 0.00103 |
+| `fold` | **0.95208** |
+| `raise` | 0.02524 |
 
 ## Predicted action counts
 
 | Predicted action | Count |
 | --- | ---: |
-| `all-in` | 3 |
-| `bet` | 88 |
-| `call` | 175 |
-| `check` | 154 |
-| `fold` | 1,248 |
-| `raise` | 194 |
+| `all-in` | 10 |
+| `bet` | 101 |
+| `call` | 199 |
+| `check` | 139 |
+| `fold` | 1,195 |
+| `raise` | 218 |
 | **Total** | **1,862** |
 
 ## Confusion matrix
@@ -87,12 +89,12 @@ Rows are recorded actions; columns are predicted actions.
 
 | Actual \\ Predicted | `all-in` | `bet` | `call` | `check` | `fold` | `raise` |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `all-in` | 3 | 1 | 7 | 1 | 1 | 0 |
-| `bet` | 0 | 63 | 0 | 27 | 0 | 0 |
-| `call` | 0 | 0 | 128 | 0 | 41 | 26 |
-| `check` | 0 | 24 | 0 | 120 | 0 | 0 |
-| `fold` | 0 | 0 | 19 | 0 | 1,155 | 7 |
-| `raise` | 0 | 0 | 21 | 6 | 51 | 161 |
+| `all-in` | 6 | 0 | 6 | 1 | 0 | 0 |
+| `bet` | 1 | 71 | 0 | 18 | 0 | 0 |
+| `call` | 2 | 0 | 134 | 0 | 27 | 32 |
+| `check` | 0 | 30 | 0 | 114 | 0 | 0 |
+| `fold` | 1 | 0 | 31 | 0 | 1,133 | 16 |
+| `raise` | 0 | 0 | 28 | 6 | 35 | 170 |
 
 ## Seeded PokerKit simulation smoke run
 
@@ -101,12 +103,12 @@ five complete hands. Two runs with seed `7` produced identical stacks:
 
 | Seat | Final stack |
 | --- | ---: |
-| 0 | $211.00 |
-| 1 | $197.00 |
-| 2 | $198.00 |
-| 3 | $193.00 |
-| 4 | $207.00 |
-| 5 | $194.00 |
+| 0 | $205.00 |
+| 1 | $238.53 |
+| 2 | $203.00 |
+| 3 | $197.00 |
+| 4 | $197.00 |
+| 5 | $159.47 |
 
 This small run verifies engine integration and seed reproducibility. Five
 hands are not enough to estimate playing strength or profitability.

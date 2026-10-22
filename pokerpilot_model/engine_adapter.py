@@ -18,7 +18,7 @@ class ModelBot:
         self.rng = rng or random.Random()
 
     def _features(self, view: Any) -> dict[str, Any]:
-        from engine.bots import HAND_PERCENTILE, chen_score, equity_vs_random, RANK_ORDER
+        from engine.bots import HAND_PERCENTILE, chen_score, RANK_ORDER
 
         hole, board = view.hole, view.board
         opponents = max(1, len(view.opponents))
@@ -48,7 +48,7 @@ class ModelBot:
                             - RANK_ORDER.index(hole[1].rank.value)),
             "chen_score": chen_score(*hole),
             "preflop_percentile": HAND_PERCENTILE[frozenset(hole)],
-            "equity_vs_random": equity_vs_random(hole, board, opponents, 100),
+            "equity_vs_random": deterministic_equity(hole, board, opponents, 100, self.rng),
             "in_position": int(view.players_behind == 0),
             "position": None,
             "opp_hands_seen": 0,
@@ -81,3 +81,31 @@ class ModelBot:
         if action == "check":
             return ("fold", None) if view.to_call else ("check_call", None)
         return action, None
+
+
+def deterministic_equity(hole: list, board: list, opponents: int, samples: int,
+                         rng: random.Random) -> float:
+    """Estimate equity with a seeded deck order, independent of hash randomization."""
+    from pokerkit import Deck, StandardHighHand
+
+    known = set(hole) | set(board)
+    available = [card for card in Deck.STANDARD if card not in known]
+    runout_count = 5 - len(board)
+    score = 0.0
+    for _ in range(samples):
+        deck = available[:]
+        rng.shuffle(deck)
+        cursor = 0
+        villains = []
+        for _ in range(opponents):
+            villains.append(deck[cursor:cursor + 2])
+            cursor += 2
+        full_board = board + deck[cursor:cursor + runout_count]
+        mine = StandardHighHand.from_game(hole, full_board)
+        theirs = [StandardHighHand.from_game(villain, full_board) for villain in villains]
+        best = max(theirs)
+        if mine > best:
+            score += 1
+        elif mine == best:
+            score += 1 / (1 + sum(hand == mine for hand in theirs))
+    return score / samples

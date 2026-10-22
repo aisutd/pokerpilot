@@ -22,16 +22,17 @@ The supplied data contains:
 | Validation | 2,023 | 262 | 2026-07-13 to 2026-07-16 |
 | Test | 1,862 | 262 | 2026-07-16 to 2026-07-19 |
 
-Training fits preprocessing on training data, selects the number of boosting
-rounds using validation macro F1, then refits on train plus validation before
-the final test evaluation.
+Training fits preprocessing on training data and selects boosting rounds,
+tree depth, and class weighting using validation macro F1. The selected setup
+is refit on train plus validation before the final test evaluation.
 
 ## Results
 
-The XGBoost classifier has now been trained and evaluated. On the held-out
-test split it scores **87.54% accuracy** and **0.7125 macro F1**. The equity
-and pot-odds rule baseline scores 61.55% accuracy and 0.4162 macro F1; the
-always-fold baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed
+The class-weighted XGBoost classifier was selected by validation macro F1.
+On the held-out test split it scores **87.43% accuracy** and **0.7415 macro
+F1**, up from 0.7125 macro F1 for the previous unweighted model. The
+equity-and-pot-odds rule baseline scores 61.55% accuracy and 0.4162 macro F1;
+the always-fold baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed
 per-action scores, prediction counts, and the confusion matrix are in
 [`MODEL_OUTPUTS.md`](MODEL_OUTPUTS.md).
 
@@ -87,7 +88,7 @@ Run package tests:
 python -m pytest pokerpilot_model/tests -q
 ```
 
-The latest test run reported **7 passed**.
+The latest test run reported **8 passed**.
 
 ## PokerKit engine integration
 

@@ -10,6 +10,7 @@ def _metric_rows(report: dict) -> list[str]:
         f"| {values['recall']:.4f} | {values['f1-score']:.4f} |"
         for label, values in report.items()
         if isinstance(values, dict) and "f1-score" in values
+        and label not in {"macro avg", "weighted avg", "accuracy"}
     ]
 
 
@@ -19,6 +20,8 @@ def render_training(results: dict) -> str:
         "",
         f"- Random seed: `{results['seed']}`",
         f"- Selected boosting rounds: `{results['selected_estimators']}`",
+        f"- Selected maximum tree depth: `{results['selected_max_depth']}`",
+        f"- Class-weight power: `{results['selected_class_weight_power']}`",
         f"- Features: {len(results['features'])}",
         "",
         "## Split metrics",
