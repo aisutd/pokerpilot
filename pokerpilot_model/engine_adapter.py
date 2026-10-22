@@ -44,7 +44,8 @@ class ModelBot:
             "card_low_rank": min(RANK_ORDER.index(c.rank.value) + 2 for c in hole),
             "is_pocket_pair": int(hole[0].rank == hole[1].rank),
             "is_suited": int(hole[0].suit == hole[1].suit),
-            "rank_gap": abs(hole[0].rank.value - hole[1].rank.value),
+            "rank_gap": abs(RANK_ORDER.index(hole[0].rank.value)
+                            - RANK_ORDER.index(hole[1].rank.value)),
             "chen_score": chen_score(*hole),
             "preflop_percentile": HAND_PERCENTILE[frozenset(hole)],
             "equity_vs_random": equity_vs_random(hole, board, opponents, 100),
@@ -62,7 +63,7 @@ class ModelBot:
 
     def decide(self, view: Any) -> tuple[str, int | None]:
         row = pd.DataFrame([self._features(view)])
-        action = str(self.artifact["pipeline"].predict(row)[0])
+        action = self.artifact["labels"][int(self.artifact["pipeline"].predict(row)[0])]
         if action == "fold" and view.to_call == 0:
             return "check_call", None
         if action in ("bet", "raise", "all-in"):
@@ -75,7 +76,7 @@ class ModelBot:
             target = round(size_bb * view.big_blind)
             target = max(view.min_raise_to, min(view.max_raise_to, target))
             return "raise", target
-        if action == "call" and view.to_call == 0:
+        if action == "call":
             return "check_call", None
         if action == "check":
             return ("fold", None) if view.to_call else ("check_call", None)

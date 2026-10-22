@@ -57,12 +57,15 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
     frames = load_splits(data_dir)
     columns = feature_columns(data_dir / "poker_feature_dictionary.csv")
     labels = sorted(frames["train"][TARGET].unique().tolist())
+    label_to_id = {label: index for index, label in enumerate(labels)}
+    train_y = frames["train"][TARGET].map(label_to_id)
     best_round, best_score, val_result = 1, -1.0, None
     candidates = sorted(set((min(100, estimators), min(200, estimators), estimators)))
     for rounds in candidates:
         candidate = build_pipeline(columns, n_estimators=rounds)
-        candidate.fit(feature_frame(frames["train"], columns), frames["train"][TARGET])
-        val_pred = candidate.predict(feature_frame(frames["val"], columns))
+        candidate.fit(feature_frame(frames["train"], columns), train_y)
+        val_pred = [labels[int(index)] for index in candidate.predict(
+            feature_frame(frames["val"], columns))]
         score = f1_score(frames["val"][TARGET], val_pred, labels=labels,
                          average="macro", zero_division=0)
         if score > best_score:
@@ -73,8 +76,9 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
     # Test is not consulted until after this selection and final fit.
     selected = build_pipeline(columns, n_estimators=best_round)
     fit_rows = pd.concat([frames["train"], frames["val"]], ignore_index=True)
-    selected.fit(feature_frame(fit_rows, columns), fit_rows[TARGET])
-    test_pred = selected.predict(feature_frame(frames["test"], columns))
+    selected.fit(feature_frame(fit_rows, columns), fit_rows[TARGET].map(label_to_id))
+    test_pred = [labels[int(index)] for index in selected.predict(
+        feature_frame(frames["test"], columns))]
     test_result = metrics(frames["test"][TARGET], test_pred, labels)
 
     output_dir.mkdir(parents=True, exist_ok=True)

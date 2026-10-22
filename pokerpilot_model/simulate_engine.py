@@ -10,6 +10,8 @@ def run(hands: int, seed: int, model: Path) -> dict:
     from engine.game import HUMAN_SEAT, Table
     from .engine_adapter import ModelBot
 
+    # PokerKit's equity sampler uses Python's module-level random generator.
+    random.seed(seed)
     table = Table("easy", seed=seed)
     for seat, player in enumerate(table.seats):
         player.bot = ModelBot(str(model), random.Random(seed + seat))

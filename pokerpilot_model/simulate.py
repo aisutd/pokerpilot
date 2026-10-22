@@ -25,7 +25,8 @@ def baseline(frame: pd.DataFrame) -> np.ndarray:
 def replay(data_dir: Path, model_path: Path, split: str) -> dict:
     frame = load_splits(data_dir)[split]
     artifact = load_model(model_path)
-    pred = artifact["pipeline"].predict(feature_frame(frame, artifact["columns"]))
+    pred = [artifact["labels"][int(index)] for index in artifact["pipeline"].predict(
+        feature_frame(frame, artifact["columns"]))]
     base = baseline(frame)
     labels = artifact["labels"]
     return {

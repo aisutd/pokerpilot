@@ -37,7 +37,9 @@ def predict(payload: DecisionFeatures) -> dict:
         row = pd.DataFrame([{column: payload.features.get(column) for column in loaded["columns"]}])
         probabilities = loaded["pipeline"].predict_proba(row)[0]
         labels = loaded["pipeline"].named_steps["classifier"].classes_
-        scores = {str(label): float(score) for label, score in zip(labels, probabilities)}
+        action_labels = loaded["labels"]
+        scores = {action_labels[int(label)]: float(score)
+                  for label, score in zip(labels, probabilities)}
         return {"action": max(scores, key=scores.get), "probabilities": scores}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="Model artifact is not available") from exc

@@ -26,23 +26,14 @@ Training fits preprocessing on training data, selects the number of boosting
 rounds using validation macro F1, then refits on train plus validation before
 the final test evaluation.
 
-## Baseline results
+## Results
 
-The XGBoost model could not be trained in the current macOS environment:
-although the Python requirements installed, the XGBoost library requires the
-OpenMP runtime `libomp`, which is not installed. Therefore, model accuracy and
-model-backed PokerKit simulation results are not available yet.
-
-The test split was evaluated with two baselines:
-
-| Baseline | Accuracy | Macro F1 |
-| --- | ---: | ---: |
-| Equity and pot-odds rule | 61.5% | 0.416 |
-| Always predict `fold` | 63.4% | 0.129 |
-
-The rule baseline uses the recorded equity and pot odds. These are comparisons
-against recorded actions, not estimates of counterfactual winnings or poker
-profitability.
+The XGBoost classifier has now been trained and evaluated. On the held-out
+test split it scores **87.54% accuracy** and **0.7125 macro F1**. The equity
+and pot-odds rule baseline scores 61.55% accuracy and 0.4162 macro F1; the
+always-fold baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed
+per-action scores, prediction counts, and the confusion matrix are in
+[`MODEL_OUTPUTS.md`](MODEL_OUTPUTS.md).
 
 ## Setup and commands
 
@@ -92,8 +83,7 @@ Run package tests:
 python -m pytest pokerpilot_model/tests -q
 ```
 
-The last test run reported **5 passed, 1 skipped**. The skipped test requires
-the XGBoost runtime, which could not load without `libomp`.
+The latest test run reported **6 passed**.
 
 ## PokerKit engine integration
 
@@ -104,7 +94,7 @@ historical player tendencies and effective stack information; these remain
 missing and are imputed by the trained pipeline. Engine simulation results
 should therefore be treated as experimental until tested with a fitted model.
 
-After training, run a seeded simulation with:
+Run a seeded simulation with:
 
 ```sh
 PYTHONPATH=.:PokerPilot-Website python -m pokerpilot_model.simulate_engine \
