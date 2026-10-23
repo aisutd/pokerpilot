@@ -14,7 +14,7 @@ What makes it "robust":
   * Uses the chronological train / val / test split already in the data,
     so we test on hands that happened AFTER the training hands (no peeking).
   * Leaky columns (outcome_*, target_*) are never used as inputs.
-  * Hyperparameters are tuned on the validation set with early stopping.
+  * Hyperparameters are tuned with 5 chronological folds and early stopping.
   * Class weights stop the model from just saying "fold" all the time.
   * Illegal actions are masked out (you can't check when facing a bet).
   * Final score is reported on the untouched test set, against baselines.
@@ -27,17 +27,18 @@ import json
 import time
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (accuracy_score, classification_report,
                              confusion_matrix, f1_score, log_loss,
                              mean_absolute_error)
 from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.model_selection import TimeSeriesSplit
 from xgboost import XGBClassifier, XGBRegressor
 
 from features import (ACTIONS, ACTION_TO_ID, apply_mask, build_features,
                       map_target)
+from write_report import write_report
 
 HERE = Path(__file__).parent
 DATA = HERE / "data"
@@ -144,32 +145,70 @@ def make_clf(params, n_estimators=2000, early_stop=True):
     )
 
 
-va_win = val["player_id"].isin(WINNERS).values
-print(f"\nTuning: {N_TRIALS} random settings, picking the best on validation...")
-results = []
+# Expanding chronological folds at game boundaries: no hand crosses a fold.
+full = pd.concat([train, val], ignore_index=True)
+X_cv, y_cv = build_features(full), map_target(full)
+games = (full[["game_id", "date"]].drop_duplicates()
+         .sort_values(["date", "game_id"])["game_id"].to_numpy())
+folds = []
+for fold, (tr_games, va_games) in enumerate(TimeSeriesSplit(n_splits=5).split(games), 1):
+    tr_idx = np.flatnonzero(full["game_id"].isin(games[tr_games]))
+    va_idx = np.flatnonzero(full["game_id"].isin(games[va_games]))
+    fold_hands = hands[hands["game_id"].isin(games[tr_games])]
+    rates = fold_hands.groupby("player_id")["ev_net_bb"].mean() * 100
+    top = max(float(rates.max()), 1e-9)
+    skill_weights = rates.apply(lambda r: LOSER_WEIGHT if r <= 0 else 1 + 4 * r / top)
+    winners = set(rates[rates > 0].index)
+    va_idx = va_idx[full.iloc[va_idx]["player_id"].isin(winners)]
+    assert not set(full.iloc[tr_idx].game_id) & set(full.iloc[va_idx].game_id)
+    assert set(y_cv.iloc[tr_idx]) == set(range(len(ACTIONS)))
+    assert len(va_idx), "No winning-player validation decisions"
+    fold_weights = full.iloc[tr_idx]["player_id"].map(skill_weights).fillna(LOSER_WEIGHT).values
+    folds.append((tr_idx, va_idx, fold_weights))
+
+print(f"\nTuning: {N_TRIALS} settings across 5 chronological folds...", flush=True)
+results, fold_results = [], []
 t0 = time.time()
 for trial in range(N_TRIALS):
     params = {k: rng.choice(v).item() for k, v in search_space.items()}
-    clf = make_clf(params)
-    clf.fit(X_tr, y_tr,
-            sample_weight=weights(y_tr, params["weight_power"]) * w_skill_tr,
-            eval_set=[(X_va[va_win], y_va[va_win])], verbose=False)
-    # Judge each setting on how well it matches WINNING players' decisions.
-    s, _, _ = scores(clf, X_va[va_win], y_va[va_win], val.loc[va_win, "facing_bet"])
-    # Rank by macro F1 (treats rare actions like bet/check fairly),
-    # use log loss to break ties.
-    results.append({**params, **s, "best_iteration": clf.best_iteration})
-    print(f"  trial {trial + 1:2d}: acc={s['accuracy']:.3f}  "
-          f"macroF1={s['macro_f1']:.3f}  logloss={s['log_loss']:.3f}")
+    rows = []
+    for fold, (tr_idx, va_idx, fold_weights) in enumerate(folds, 1):
+        clf = make_clf(params)
+        clf.fit(X_cv.iloc[tr_idx], y_cv.iloc[tr_idx],
+                sample_weight=weights(y_cv.iloc[tr_idx], params["weight_power"]) * fold_weights,
+                eval_set=[(X_cv.iloc[va_idx], y_cv.iloc[va_idx])], verbose=False)
+        score, _, _ = scores(clf, X_cv.iloc[va_idx], y_cv.iloc[va_idx],
+                              full.iloc[va_idx]["facing_bet"])
+        row = {"trial": trial + 1, "fold": fold, **score,
+               "best_iteration": clf.best_iteration,
+               "train_rows": len(tr_idx), "validation_rows": len(va_idx)}
+        rows.append(row)
+        fold_results.append(row)
+    means = {k: float(np.mean([r[k] for r in rows]))
+             for k in ["accuracy", "macro_f1", "log_loss", "best_iteration"]}
+    results.append({"trial": trial + 1, **params, **means})
+    print(f"  trial {trial + 1:2d}: mean acc={means['accuracy']:.3f}  "
+          f"macroF1={means['macro_f1']:.3f}  logloss={means['log_loss']:.3f}", flush=True)
 
-res = pd.DataFrame(results).sort_values(["macro_f1", "log_loss"],
-                                        ascending=[False, True])
+res = pd.DataFrame(results).sort_values(["macro_f1", "log_loss"], ascending=[False, True])
 res.to_csv(OUT / "tuning_results.csv", index=False)
+pd.DataFrame(fold_results).to_csv(OUT / "cv_results.csv", index=False)
 best = res.iloc[0].to_dict()
 best_params = {k: best[k] for k in search_space}
 for k in ["max_depth", "min_child_weight"]:
     best_params[k] = int(best_params[k])
-n_trees = int(best["best_iteration"]) + 1
+n_trees = int(round(best["best_iteration"])) + 1
+selected_folds = [r for r in fold_results if r["trial"] == int(best["trial"])]
+cv_summary = {
+    "method": "5-fold expanding-window chronological CV grouped by game_id",
+    "selection_note": "Folds are used for early stopping and hyperparameter selection; final test is separate. CV scores are tuning estimates, not an unbiased test.",
+    "selected_trial": int(best["trial"]),
+    "mean": {k: float(np.mean([r[k] for r in selected_folds]))
+             for k in ["accuracy", "macro_f1", "log_loss"]},
+    "std": {k: float(np.std([r[k] for r in selected_folds], ddof=1))
+            for k in ["accuracy", "macro_f1", "log_loss"]},
+    "folds": selected_folds,
+}
 print(f"Tuning took {time.time() - t0:.0f}s. Best: {best_params}, trees={n_trees}")
 
 # ------------------------------------------------------------------
@@ -178,7 +217,7 @@ print(f"Tuning took {time.time() - t0:.0f}s. Best: {best_params}, trees={n_trees
 X_full = pd.concat([X_tr, X_va])
 y_full = pd.concat([y_tr, y_va])
 # A bit more data -> a few more trees is usually right.
-final_trees = int(n_trees * 1.15)
+final_trees = n_trees
 action_model = make_clf(best_params, n_estimators=final_trees, early_stop=False)
 action_model.fit(X_full, y_full,
                  sample_weight=weights(y_full, best_params["weight_power"])
@@ -247,23 +286,28 @@ def sizing_rows(df):
     return (build_features(df[m]), df.loc[m, "target_bet_size_pot_frac"].clip(upper=3), w)
 
 
-Xs_tr, ys_tr, ws_tr = sizing_rows(train)
-Xs_va, ys_va, ws_va = sizing_rows(val)
-Xs_te, ys_te, _ = sizing_rows(test)          # test = winners only by now
 size_params = dict(n_estimators=2000, max_depth=4, learning_rate=0.03,
                    subsample=0.8, colsample_bytree=0.8, min_child_weight=3,
                    tree_method="hist", enable_categorical=True,
                    max_cat_to_onehot=1, random_state=SEED, n_jobs=-1)
-probe = XGBRegressor(**size_params, early_stopping_rounds=100,
-                     objective="reg:absoluteerror")
-probe.fit(Xs_tr, ys_tr, sample_weight=ws_tr,
-          eval_set=[(Xs_va, ys_va)], sample_weight_eval_set=[ws_va], verbose=False)
-size_params["n_estimators"] = int((probe.best_iteration + 1) * 1.15)
+size_folds = []
+for fold, (tr_idx, va_idx, fold_weights) in enumerate(folds, 1):
+    tr_df, va_df = full.iloc[tr_idx], full.iloc[va_idx]
+    tr_mask = tr_df["target_action"].isin(["bet", "raise"]) & tr_df["target_bet_size_pot_frac"].notna()
+    Xs_tr, ys_tr, _ = sizing_rows(tr_df)
+    Xs_va, ys_va, _ = sizing_rows(va_df)
+    probe = XGBRegressor(**size_params, early_stopping_rounds=100, objective="reg:absoluteerror")
+    probe.fit(Xs_tr, ys_tr, sample_weight=fold_weights[tr_mask],
+              eval_set=[(Xs_va, ys_va)], verbose=False)
+    size_folds.append({"fold": fold, "mae_pot_frac": mean_absolute_error(ys_va, probe.predict(Xs_va)),
+                       "best_iteration": probe.best_iteration, "validation_rows": len(ys_va)})
+size_params["n_estimators"] = int(round(np.mean([r["best_iteration"] + 1 for r in size_folds])))
+Xs_full, ys_full, ws_full = sizing_rows(full)
+Xs_te, ys_te, _ = sizing_rows(test)
 sizing_model = XGBRegressor(**size_params, objective="reg:absoluteerror")
-sizing_model.fit(pd.concat([Xs_tr, Xs_va]), pd.concat([ys_tr, ys_va]),
-                 sample_weight=np.concatenate([ws_tr, ws_va]))
+sizing_model.fit(Xs_full, ys_full, sample_weight=ws_full)
 size_mae = mean_absolute_error(ys_te, sizing_model.predict(Xs_te))
-size_base = mean_absolute_error(ys_te, np.full(len(ys_te), np.median(ys_tr)))
+size_base = mean_absolute_error(ys_te, np.full(len(ys_te), np.median(ys_full)))
 print(f"\nSizing model MAE on test: {size_mae:.3f} pot "
       f"(baseline 'always median size': {size_base:.3f})")
 
@@ -273,6 +317,8 @@ print(f"\nSizing model MAE on test: {size_mae:.3f} pot "
 action_model.save_model(OUT / "action_model.json")
 sizing_model.save_model(OUT / "sizing_model.json")
 metrics = {
+    "cross_validation": cv_summary,
+    "sizing_cross_validation": size_folds,
     "test_winning_players": test_scores,
     "test_all_players": all_scores,
     "winning_players": sorted(WINNERS),
@@ -288,4 +334,5 @@ with open(OUT / "metrics.json", "w") as f:
     json.dump(metrics, f, indent=2, default=float)
 with open(OUT / "test_report.txt", "w") as f:
     f.write(report + "\n" + cm.to_string() + "\n")
-print(f"\nSaved models and reports to {OUT}/")
+write_report(OUT)
+print(f"\nSaved models and reports to {OUT}/ (readable summary: report.md)")

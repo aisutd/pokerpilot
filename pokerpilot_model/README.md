@@ -20,7 +20,8 @@ On a Mac, if you get an error mentioning `libomp`, run `brew install libomp`.
 | `features.py` | Builds the model inputs. Shared by training and the app so they always match. |
 | `train.py` | Tunes, trains, tests and saves both models. |
 | `predict.py` | `PokerPilotModel().recommend(state)` for the FastAPI backend. |
-| `artifacts/` | Saved models, test scores (`metrics.json`, `test_report.txt`), feature importance, tuning log. |
+| `write_report.py` | Writes `artifacts/report.md`, a readable summary of the last training run (train.py calls it). |
+| `artifacts/` | Saved models, `report.md`, test scores (`metrics.json`, `test_report.txt`), feature importance, tuning log. |
 | `data/` | The team CSVs. |
 
 ## Version 2: learns from winning players
@@ -37,15 +38,15 @@ The weights are saved in `artifacts/player_weights.csv`.
 
 | | Model | Baseline |
 |---|---|---|
-| Accuracy | 80.3% | 63.1% always fold, 72.0% fold-or-check rule |
-| Macro F1 (treats every action equally) | 0.717 | 0.326 |
-| Bet sizing error | 0.162 pot | 0.440 pot always-median |
+| Accuracy | 79.6% | 63.1% always fold, 72.0% fold-or-check rule |
+| Macro F1 (treats every action equally) | 0.692 | 0.326 |
+| Bet sizing error | 0.166 pot | 0.440 pot always-median |
 
 This is lower than version 1 (87.3%). That's expected: winners play different styles from each other (tight-aggressive, loose-passive, etc.), and the model no longer gets told whose style it's looking at, so it learns their blended strategy instead of copying one person.
 
 ## How it's built
 
-- Inputs are the columns marked `use_as_model_input = Yes` in the feature dictionary (minus the acting player's own stats), plus 7 engineered ones (equity minus pot odds, cost of calling as a share of stack, opponent looseness vs the table, etc.).
+- Inputs are the columns marked `use_as_model_input = Yes` in the feature dictionary (minus the acting player's own stats, and minus seat, stake level, dollar blind size, opponent stack and opponent's last-20 result, which are noise for the decision), plus 7 engineered ones (equity minus pot odds, cost of calling as a share of stack, opponent looseness vs the table, etc.).
 - `outcome_*` and `target_*` columns are never inputs, since they reveal the answer.
 - Uses the chronological train/val/test split in the data. 30 hyperparameter settings were tried on validation (judged on winners' decisions) with early stopping, then the best was retrained on train + val and scored once on test.
 - Illegal actions are removed before picking: when facing a bet the model can only say fold/call/raise; otherwise check/bet/raise.

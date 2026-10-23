@@ -1,13 +1,112 @@
 {
+  "cross_validation": {
+    "method": "5-fold expanding-window chronological CV grouped by game_id",
+    "selection_note": "Folds are used for early stopping and hyperparameter selection; final test is separate. CV scores are tuning estimates, not an unbiased test.",
+    "selected_trial": 30,
+    "mean": {
+      "accuracy": 0.7788655676144575,
+      "macro_f1": 0.6653245826796962,
+      "log_loss": 0.5536687937291306
+    },
+    "std": {
+      "accuracy": 0.030644549325813945,
+      "macro_f1": 0.029243229796912962,
+      "log_loss": 0.0471646397281706
+    },
+    "folds": [
+      {
+        "trial": 30,
+        "fold": 1,
+        "accuracy": 0.7360931435963778,
+        "macro_f1": 0.6201199184483204,
+        "log_loss": 0.6265479517685687,
+        "best_iteration": 179,
+        "train_rows": 1834,
+        "validation_rows": 773
+      },
+      {
+        "trial": 30,
+        "fold": 2,
+        "accuracy": 0.7734457323498419,
+        "macro_f1": 0.6755841237053171,
+        "log_loss": 0.5681722504834517,
+        "best_iteration": 302,
+        "train_rows": 3703,
+        "validation_rows": 949
+      },
+      {
+        "trial": 30,
+        "fold": 3,
+        "accuracy": 0.7678571428571429,
+        "macro_f1": 0.6684450055323525,
+        "log_loss": 0.5382420176413648,
+        "best_iteration": 314,
+        "train_rows": 5575,
+        "validation_rows": 1120
+      },
+      {
+        "trial": 30,
+        "fold": 4,
+        "accuracy": 0.8119266055045872,
+        "macro_f1": 0.661797240337705,
+        "log_loss": 0.5342662212199725,
+        "best_iteration": 277,
+        "train_rows": 7433,
+        "validation_rows": 872
+      },
+      {
+        "trial": 30,
+        "fold": 5,
+        "accuracy": 0.8050052137643379,
+        "macro_f1": 0.7006766253747856,
+        "log_loss": 0.501115527532295,
+        "best_iteration": 472,
+        "train_rows": 9181,
+        "validation_rows": 959
+      }
+    ]
+  },
+  "sizing_cross_validation": [
+    {
+      "fold": 1,
+      "mae_pot_frac": 0.17240113819491482,
+      "best_iteration": 131,
+      "validation_rows": 124
+    },
+    {
+      "fold": 2,
+      "mae_pot_frac": 0.1793271928979291,
+      "best_iteration": 515,
+      "validation_rows": 144
+    },
+    {
+      "fold": 3,
+      "mae_pot_frac": 0.16422793435780045,
+      "best_iteration": 382,
+      "validation_rows": 194
+    },
+    {
+      "fold": 4,
+      "mae_pot_frac": 0.15303663125531428,
+      "best_iteration": 168,
+      "validation_rows": 145
+    },
+    {
+      "fold": 5,
+      "mae_pot_frac": 0.15281548271802514,
+      "best_iteration": 354,
+      "validation_rows": 153
+    }
+  ],
   "test_winning_players": {
-    "accuracy": 0.802771855010661,
-    "macro_f1": 0.7173142402062516,
-    "log_loss": 0.4921522454007706
+    "accuracy": 0.8123667377398721,
+    "macro_f1": 0.7187146356202747,
+    "log_loss": 0.4687690937995783
   },
   "test_all_players": {
-    "accuracy": 0.7943071965628357,
-    "macro_f1": 0.6978970468125439,
-    "log_loss": 0.5102744422739321
+    "accuracy": 0.8029001074113856,
+    "macro_f1": 0.7055748431243001,
+    "log_loss": 0.487379306881813
   },
   "winning_players": [
     "P03",
@@ -29,18 +128,18 @@
   "by_street": {
     "Preflop": {
       "rows": 769,
-      "accuracy": 0.8075422626788037,
-      "macro_f1": 0.7193480841947681
+      "accuracy": 0.823146944083225,
+      "macro_f1": 0.7285833151831894
     },
     "Flop": {
       "rows": 84,
-      "accuracy": 0.7738095238095238,
-      "macro_f1": 0.6102662199208042
+      "accuracy": 0.75,
+      "macro_f1": 0.5970196078431373
     },
     "Turn": {
       "rows": 50,
-      "accuracy": 0.7,
-      "macro_f1": 0.6341157580854805
+      "accuracy": 0.68,
+      "macro_f1": 0.560334466912885
     },
     "River": {
       "rows": 35,
@@ -48,20 +147,20 @@
       "macro_f1": 0.7546688605512135
     }
   },
-  "sizing_mae_pot_frac": 0.1622331137508541,
+  "sizing_mae_pot_frac": 0.1672497707113043,
   "sizing_baseline_mae": 0.44000649350649346,
   "best_params": {
     "max_depth": 3,
-    "learning_rate": 0.08,
-    "min_child_weight": 5,
-    "subsample": 0.9,
-    "colsample_bytree": 0.7,
-    "reg_lambda": 3.0,
-    "reg_alpha": 0.0,
-    "gamma": 0.5,
+    "learning_rate": 0.03,
+    "min_child_weight": 10,
+    "subsample": 1.0,
+    "colsample_bytree": 0.85,
+    "reg_lambda": 1.0,
+    "reg_alpha": 0.1,
+    "gamma": 0.1,
     "weight_power": 0.5
   },
-  "n_trees": 188,
+  "n_trees": 310,
   "classes": [
     "fold",
     "check",
