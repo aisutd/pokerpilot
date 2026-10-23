@@ -5,6 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+import sys
+from pathlib import Path
+ssys.path.append(str(Path(__file__).resolve().parent.parent / "pokerpilot_model"))
+from predict import PokerPilotModel
+
 load_dotenv()  
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -22,7 +27,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+model = PokerPilotModel()   # loads once when the server starts
 
+
+@app.post("/api/recommend")
+def recommend(state: dict):
+    return model.recommend(state)
 
 
 class UserInput(BaseModel):
