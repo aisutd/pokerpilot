@@ -11,11 +11,41 @@
   <link rel="stylesheet" href="/static/lobby.css">
   <link rel="stylesheet" href="/static/loading.css">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/auth.css">
 </head>
 <body>
 
+  <section id="auth" class="auth-screen" aria-label="Account access">
+    <div class="auth-card">
+      <div class="auth-mark">♠</div>
+      <h1>PokerPilot</h1>
+      <p class="auth-subtitle">Sign in to take your seat.</p>
+      <form id="login-form">
+        <label for="login-identifier">Username or email</label>
+        <input id="login-identifier" autocomplete="username" required maxlength="254">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required maxlength="128">
+        <button class="auth-submit" type="submit">Log in</button>
+        <button class="auth-switch" id="show-signup" type="button">Create an account</button>
+      </form>
+      <form id="signup-form" hidden>
+        <label for="signup-username">Username</label>
+        <input id="signup-username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+">
+        <label for="signup-email">Email</label>
+        <input id="signup-email" type="email" autocomplete="email" required maxlength="254">
+        <label for="signup-password">Password <span>(12 characters minimum)</span></label>
+        <input id="signup-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+        <label for="signup-confirm">Confirm password</label>
+        <input id="signup-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+        <button class="auth-submit" type="submit">Create account</button>
+        <button class="auth-switch" id="show-login" type="button">Already have an account? Log in</button>
+      </form>
+      <p id="auth-error" class="auth-error" role="alert" hidden></p>
+    </div>
+  </section>
+
   <!-- ============================== LOBBY ============================== -->
-  <section id="lobby" class="screen">
+  <section id="lobby" class="screen" hidden>
     <div class="room" aria-hidden="true">
       <div class="glow curtain-left"></div>
       <div class="glow curtain-right"></div>
@@ -44,6 +74,7 @@
       </div>
       <h1 class="wordmark"><span class="poker">Poker</span> <span class="pilot">Pilot</span></h1>
       <p class="tagline">LEARN <i>&middot;</i> PLAY <i>&middot;</i> IMPROVE</p>
+      <div class="lobby-account"><span id="welcome-user"></span><button id="logout" type="button">Log out</button></div>
     </header>
 
     <div class="lobby-table" aria-hidden="true">
@@ -71,7 +102,8 @@
       <div class="cardbox right"></div>
     </div>
 
-    <nav class="modes" aria-label="Choose a difficulty">
+    <p class="mode-heading">Play Against AI <span>Choose a difficulty</span></p>
+    <nav class="modes" id="ai-modes" aria-label="Choose a difficulty">
       <button class="mode" data-difficulty="easy">
         <span class="play-card tilt-left">
           <span class="idx top">2<b>&spades;</b></span>
@@ -100,6 +132,26 @@
         <span class="mode-rule"></span>
       </button>
     </nav>
+
+    <section class="online-panel" aria-labelledby="online-title">
+      <div><h2 id="online-title">Play Online</h2><p>Invite friends to a private table.</p></div>
+      <button id="create-room" type="button">Create Room</button>
+      <div class="join-room-form">
+        <label for="room-code">Have a room code?</label>
+        <input id="room-code" maxlength="6" autocomplete="off" placeholder="6-character code">
+        <button id="join-room" type="button">Join Room</button>
+      </div>
+    </section>
+
+    <section id="room-lobby" class="room-lobby" hidden aria-live="polite">
+      <button id="leave-room" class="room-close" type="button" aria-label="Leave room">×</button>
+      <h2>Private Room</h2>
+      <p>Room code <strong id="room-code-display"></strong> <button id="copy-room-code" type="button">Copy</button></p>
+      <ol id="room-players"></ol>
+      <p id="room-message"></p>
+      <button id="start-room" type="button">Start Game</button>
+      <button id="cancel-room" type="button">Leave Room</button>
+    </section>
 
     <p id="lobby-error" class="lobby-error" hidden></p>
   </section>
@@ -150,6 +202,7 @@
     <header class="topbar">
       <button id="quit" class="ghost">&larr; Lobby</button>
       <div class="hand-info"><span id="hand-number"></span> &middot; <span id="street"></span></div>
+      <span id="online-turn" class="online-turn" hidden>Online game</span>
       <button id="history-toggle" class="ghost" aria-expanded="false" aria-controls="history">History</button>
     </header>
 

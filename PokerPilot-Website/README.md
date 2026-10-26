@@ -1,5 +1,11 @@
 # Poker Pilot
 
+> **Primary app:** from the repository root, install `backend/requirements.txt`
+> and run `uvicorn backend.main:app --host 127.0.0.1 --port 8000`. This serves
+> the authenticated FastAPI app, existing poker table UI, AI tables, and
+> multiplayer rooms. The Flask instructions below describe the preserved
+> legacy AI-only server.
+
 Play 6-max No-Limit Texas Hold'em in your browser against five AI players.
 All game rules (blinds, betting order, legal bet sizes, side pots, showdowns
 and hand ranking) are handled by
