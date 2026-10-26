@@ -16,6 +16,11 @@ let busy = false;
 let epoch = 0; // bumped when leaving the table, to cancel animations
 let seatEls = null;
 let chatRequest = 0;
+let signedInUser = null;
+let onlineRoom = null;
+let roomSocket = null;
+let roomVersion = 0;
+let isOnlineGame = false;
 
 // ------------------------------------------------------------- helpers
 
@@ -37,9 +42,13 @@ function prettyCard(code) {
 }
 
 async function api(path, body) {
-  const options = body === undefined
-    ? { method: 'GET' }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const headers = {};
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    const csrf = document.cookie.split('; ').find((item) => item.startsWith('pokerpilot_csrf='));
+    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf.slice('pokerpilot_csrf='.length));
+  }
+  const options = body === undefined ? { method: 'GET' } : { method: 'POST', headers, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -62,7 +71,7 @@ async function api(path, body) {
     throw new Error('The server sent an unexpected response.');
   }
 
-  if (!response.ok) throw new Error((data && data.error) || 'Something went wrong.');
+  if (!response.ok) throw new Error((data && (data.error || data.detail)) || 'Something went wrong.');
   return data;
 }
 
@@ -79,13 +88,7 @@ function showError(message) {
 }
 
 async function connectChat() {
-  const requestId = ++chatRequest;
-  const room = await api('/api/chat-room');
-  if (requestId !== chatRequest || $('game').hidden) return;
-
-  const frame = $('chat-frame');
-  $('chat-widget').hidden = false;
-  frame.src = `${frame.dataset.src}?room=${encodeURIComponent(room.room)}`;
+  disconnectChat();
 }
 
 function disconnectChat() {
@@ -317,9 +320,14 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
   $('game-over').hidden = !over;
   if (over) {
     $('game-over-title').textContent = v.human_won_game ? 'You cleaned out the table!' : 'You’re out of chips';
-    $('game-over-text').textContent = v.human_won_game
-      ? `You beat all five AI players on ${v.difficulty} in ${v.hand_number} hands.`
-      : `You lasted ${v.hand_number} hands on ${v.difficulty}. Ready for another go?`;
+    if (isOnlineGame) {
+      $('game-over-title').textContent = v.human_won_game ? 'You won the table!' : 'The table is over';
+      $('game-over-text').textContent = `Online game finished after ${v.hand_number} hands.`;
+    } else {
+      $('game-over-text').textContent = v.human_won_game
+        ? `You beat all five AI players on ${v.difficulty} in ${v.hand_number} hands.`
+        : `You lasted ${v.hand_number} hands on ${v.difficulty}. Ready for another go?`;
+    }
   }
 }
 
@@ -365,6 +373,7 @@ function renderControls(v, animating, thinking) {
   const legal = !animating && !busy ? v.legal : null;
   $('actions').hidden = !legal;
   $('hand-done').hidden = animating || busy || !v.hand_over || v.game_over;
+  $('next-hand').disabled = isOnlineGame && onlineRoom && onlineRoom.host_id !== signedInUser.id;
 
   const waiting = $('waiting');
   waiting.hidden = Boolean(legal) || (v.hand_over && !animating && !busy);
@@ -495,6 +504,16 @@ async function send(path, body) {
   let failure = null;
 
   try {
+    if (isOnlineGame) {
+      if (!roomSocket || roomSocket.readyState !== WebSocket.OPEN) {
+        throw new Error('Room connection lost. Return to the room lobby and reconnect.');
+      }
+      roomSocket.send(JSON.stringify({
+        type: path === '/api/next' ? 'next_hand' : 'player_action',
+        ...(body || {}), version: roomVersion,
+      }));
+      return; // the server broadcasts the authoritative state to every seat
+    }
     response = await api(path, body);
     await playFrames(response.frames, myEpoch);
   } catch (error) {
@@ -514,6 +533,13 @@ async function send(path, body) {
 
 async function startGame(difficulty) {
   if (busy) return;
+  isOnlineGame = false;
+  $('online-turn').hidden = true;
+  if (onlineRoom && ['waiting', 'finished'].includes(onlineRoom.status)) {
+    api(`/api/rooms/${onlineRoom.room_code}/leave`, {}).catch(() => {});
+  }
+  onlineRoom = null;
+  if (roomSocket) { roomSocket.close(); roomSocket = null; }
   disconnectChat();
   busy = true;
   showError(null);
@@ -543,6 +569,177 @@ async function startGame(difficulty) {
 
 // -------------------------------------------------------------- events
 
+function showAuth(message = '') {
+  $('auth').hidden = false;
+  for (const id of ['lobby', 'loading', 'game']) $(id).hidden = true;
+  $('auth-error').hidden = !message;
+  $('auth-error').textContent = message;
+}
+
+function showLobby(user) {
+  signedInUser = user;
+  $('welcome-user').textContent = `Welcome, ${user.username}`;
+  $('auth').hidden = true;
+  showScreen('lobby');
+}
+
+function paintRoom(room) {
+  onlineRoom = room;
+  $('room-code-display').textContent = room.room_code;
+  $('room-players').replaceChildren(...room.players.map((player, index) => {
+    const item = document.createElement('li');
+    item.textContent = `${index + 1}. ${player.username}${player.connected ? '' : ' · reconnecting'}`;
+    item.classList.toggle('host', player.is_host);
+    return item;
+  }));
+  const isHost = room.host_id === signedInUser.id;
+  $('start-room').style.display = isHost && room.status === 'waiting' && room.players.length >= 2 ? 'block' : 'none';
+  $('room-message').textContent = room.status === 'waiting'
+    ? (room.players.length < 2 ? 'Waiting for at least one friend to join.' : (isHost ? 'Your table is ready.' : 'Waiting for the host to start.'))
+    : (room.status === 'finished' ? 'This game is over.' : 'Room is reconnecting.');
+  $('room-lobby').hidden = room.status !== 'waiting';
+}
+
+function receiveRoomMessage(message) {
+  if (message.type === 'error') {
+    busy = false;
+    showError(message.message || 'Room request failed.');
+    return;
+  }
+  if (message.room) paintRoom(message.room);
+  if (message.type === 'game_state') {
+    if (!view || !isOnlineGame) seatEls = null;
+    isOnlineGame = true;
+    roomVersion = message.version ?? message.room.version ?? roomVersion;
+    $('room-lobby').hidden = true;
+    $('online-turn').hidden = false;
+    $('online-turn').textContent = `Room ${message.room.room_code}`;
+    showScreen('game');
+    busy = false;
+    showError(null);
+    render(message.game);
+  }
+}
+
+function connectRoom(code) {
+  if (roomSocket) roomSocket.close();
+  const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const socket = new WebSocket(`${scheme}//${location.host}/ws/rooms/${encodeURIComponent(code)}`);
+  roomSocket = socket;
+  socket.onmessage = (event) => {
+    try { receiveRoomMessage(JSON.parse(event.data)); }
+    catch { showError('The room sent an invalid update.'); }
+  };
+  socket.onclose = () => {
+    if (roomSocket !== socket) return;
+    busy = false;
+    if (isOnlineGame && !$('game').hidden) showError('Disconnected from the room. Reload to reconnect.');
+  };
+  socket.onerror = () => showError('Could not connect to the room.');
+}
+
+async function openRoom(room) {
+  paintRoom(room);
+  connectRoom(room.room_code);
+}
+
+async function enterAfterAuth(user) {
+  showLobby(user);
+  try {
+    const current = await api('/api/rooms/current');
+    if (current) {
+      paintRoom(current.room);
+      connectRoom(current.room.room_code);
+      if (current.type === 'game_state') receiveRoomMessage(current);
+    }
+  } catch (error) { showError(error.message); }
+  if (!onlineRoom) {
+    const state = await api('/api/state').catch(() => null);
+    if (state && state.view) { showScreen('game'); render(state.view); }
+  }
+}
+
+$('login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  $('auth-error').hidden = true;
+  try {
+    const result = await api('/api/auth/login', {
+      identifier: $('login-identifier').value.trim(), password: $('login-password').value,
+    });
+    await enterAfterAuth(result.user);
+  } catch (error) { showAuth(error.message); }
+});
+
+$('signup-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if ($('signup-password').value !== $('signup-confirm').value) {
+    showAuth('Passwords do not match.'); return;
+  }
+  $('auth-error').hidden = true;
+  try {
+    const result = await api('/api/auth/signup', {
+      username: $('signup-username').value.trim(), email: $('signup-email').value.trim(),
+      password: $('signup-password').value,
+    });
+    await enterAfterAuth(result.user);
+  } catch (error) { showAuth(error.message); }
+});
+
+$('show-signup').addEventListener('click', () => {
+  $('login-form').hidden = true; $('signup-form').hidden = false; $('auth-error').hidden = true;
+});
+$('show-login').addEventListener('click', () => {
+  $('signup-form').hidden = true; $('login-form').hidden = false; $('auth-error').hidden = true;
+});
+$('logout').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', {});
+    signedInUser = null; onlineRoom = null; isOnlineGame = false;
+    if (roomSocket) { roomSocket.close(); roomSocket = null; }
+    showAuth();
+  } catch (error) { showError(error.message); }
+});
+
+$('create-room').addEventListener('click', async () => {
+  try { await openRoom(await api('/api/rooms', {})); }
+  catch (error) { showError(error.message); }
+});
+$('join-room').addEventListener('click', async () => {
+  try { await openRoom(await api('/api/rooms/join', { room_code: $('room-code').value.trim().toUpperCase() })); }
+  catch (error) { showError(error.message); }
+});
+$('room-code').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('join-room').click(); });
+$('start-room').addEventListener('click', async () => {
+  if (!onlineRoom) return;
+  try {
+    const response = await api(`/api/rooms/${onlineRoom.room_code}/start`, {});
+    receiveRoomMessage(response);
+  } catch (error) { $('room-message').textContent = error.message; }
+});
+$('copy-room-code').addEventListener('click', async () => {
+  if (!onlineRoom) return;
+  try { await navigator.clipboard.writeText(onlineRoom.room_code); $('copy-room-code').textContent = 'Copied'; }
+  catch { $('room-message').textContent = `Share code ${onlineRoom.room_code} with your friend.`; }
+});
+async function closeWaitingRoom() {
+  if (!onlineRoom) return;
+  try { await api(`/api/rooms/${onlineRoom.room_code}/leave`, {}); }
+  catch (error) { $('room-message').textContent = error.message; return; }
+  if (roomSocket) { roomSocket.close(); roomSocket = null; }
+  onlineRoom = null; isOnlineGame = false; $('room-lobby').hidden = true;
+}
+$('leave-room').addEventListener('click', closeWaitingRoom);
+$('cancel-room').addEventListener('click', closeWaitingRoom);
+
+async function initializeApp() {
+  try {
+    await api('/api/auth/csrf');
+    const result = await api('/api/auth/me');
+    await enterAfterAuth(result.user);
+  } catch { showAuth(); }
+}
+initializeApp();
+
 function act(action) {
   if (busy || !view || !view.legal || !$('actions').offsetParent) return;
   const legal = view.legal;
@@ -567,7 +764,6 @@ $('btn-fold').addEventListener('click', () => act('fold'));
 $('btn-call').addEventListener('click', () => act('check_call'));
 $('btn-raise').addEventListener('click', () => act('raise'));
 $('next-hand').addEventListener('click', () => send('/api/next', {}));
-$('play-again').addEventListener('click', () => startGame(view.difficulty));
 
 $('raise-caret').addEventListener('click', () => {
   const caret = $('raise-caret');
@@ -611,20 +807,44 @@ function toggleHistory(open) {
 $('history-toggle').addEventListener('click', () => toggleHistory($('history').hidden));
 $('history-close').addEventListener('click', () => toggleHistory(false));
 
-function toLobby() {
+async function toLobby() {
+  if (isOnlineGame && onlineRoom && onlineRoom.status === 'in_progress') {
+    showError('This multiplayer table is still active. Reconnect after returning to the room; leaving mid-hand is disabled.');
+    return;
+  }
+  if (onlineRoom && ['waiting', 'finished'].includes(onlineRoom.status)) {
+    try { await api(`/api/rooms/${onlineRoom.room_code}/leave`, {}); }
+    catch (error) { showError(error.message); return; }
+  }
   epoch += 1;
   busy = false;
   disconnectChat();
   toggleHistory(false);
+  if (roomSocket) { const socket = roomSocket; roomSocket = null; socket.close(); }
+  onlineRoom = null;
+  isOnlineGame = false;
+  $('online-turn').hidden = true;
   showScreen('lobby');
   showError(null);
 }
 
 $('to-lobby').addEventListener('click', toLobby);
 $('quit').addEventListener('click', () => {
+  if (isOnlineGame && onlineRoom && onlineRoom.status === 'in_progress') {
+    showError('Finish the current multiplayer hand before leaving the table.');
+    return;
+  }
   if (view && !view.hand_over && !view.game_over
       && !confirm('Leave this table? Starting a new game will forfeit it.')) return;
   toLobby();
+});
+
+$('play-again').addEventListener('click', () => {
+  if (isOnlineGame && onlineRoom) {
+    closeWaitingRoom().then(() => { showScreen('lobby'); });
+    return;
+  }
+  startGame(view.difficulty);
 });
 
 document.addEventListener('keydown', (e) => {
@@ -638,14 +858,3 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'r') act('raise');
   else if (key === 'n' && view && view.hand_over && !view.game_over && !busy) send('/api/next', {});
 });
-
-// Resume a game in progress after a page reload.
-api('/api/state')
-  .then((data) => {
-    if (data && data.view) {
-      showScreen('game');
-      render(data.view);
-      connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
-    }
-  })
-  .catch(() => { /* no game yet: stay in the lobby */ });

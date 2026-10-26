@@ -108,16 +108,29 @@ class Seat:
 
 
 class Table:
-    def __init__(self, difficulty: str, seed: int | None = None) -> None:
+    def __init__(self, difficulty: str, seed: int | None = None,
+                 human_names: list[str] | None = None,
+                 bot_count: int | None = None) -> None:
         if difficulty not in DIFFICULTIES:
             raise GameError(f'Unknown difficulty: {difficulty!r}')
 
         self.lock = threading.Lock()
         self.rng = random.Random(seed)
         self.difficulty = difficulty
-        self.seats = [Seat('You', None, 'teal', None)]
+        human_names = human_names or ['You']
+        if not 1 <= len(human_names) <= SEAT_COUNT:
+            raise GameError('A table needs between one and six human players.')
+        if bot_count is None:
+            bot_count = SEAT_COUNT - len(human_names)
+        if bot_count < 0 or len(human_names) + bot_count > SEAT_COUNT:
+            raise GameError('A table can have at most six players.')
 
-        for character in CHARACTERS:
+        self.human_seats = set(range(len(human_names)))
+        self.seats = [Seat(name, None, 'teal' if i == 0 else CHARACTERS[i % len(CHARACTERS)].color, None)
+                      for i, name in enumerate(human_names)]
+        self.multiplayer = len(human_names) > 1 and bot_count == 0
+
+        for character in CHARACTERS[:bot_count]:
             bot = create_bot(difficulty, character, random.Random(self.rng.random()))
             self.seats.append(Seat(character.name, character.avatar, character.color, bot))
 
@@ -138,6 +151,9 @@ class Table:
     def game_over(self) -> bool:
         if not self.hand_over:
             return False
+
+        if self.multiplayer:
+            return sum(self.seats[s].stack > 0 for s in self.human_seats) <= 1
 
         human_busted = self.seats[HUMAN_SEAT].stack == 0
         bots_left = sum(1 for seat in self.seats[1:] if seat.stack > 0)
@@ -161,8 +177,8 @@ class Table:
     # -------------------------------------------------------------- setup
 
     def next_active(self, seat: int) -> int:
-        for step in range(1, SEAT_COUNT + 1):
-            candidate = (seat + step) % SEAT_COUNT
+        for step in range(1, len(self.seats) + 1):
+            candidate = (seat + step) % len(self.seats)
 
             if self.seats[candidate].stack > 0:
                 return candidate
@@ -229,6 +245,7 @@ class Table:
         where = role.get(HUMAN_SEAT, 'in middle position')
         self.log = [f'Hand #{self.hand_number} - you are {where}.']
         self.frames = []
+        self.frames_by_viewer = {human: [] for human in self.human_seats}
         self.sync()
         self.snapshot()
         self.run_bots()
@@ -453,6 +470,8 @@ class Table:
 
     def snapshot(self) -> None:
         self.frames.append(self.view())
+        for human in self.human_seats:
+            self.frames_by_viewer[human].append(self.view_for(human))
 
     # ---------------------------------------------------------------- bots
 
@@ -506,7 +525,7 @@ class Table:
         )
 
     def run_bots(self) -> None:
-        while (seat := self.actor_seat) is not None and seat != HUMAN_SEAT:
+        while (seat := self.actor_seat) is not None and seat not in self.human_seats:
             bot = self.seats[seat].bot
             action, amount = bot.decide(self.bot_view(seat))
             state = self.state
@@ -525,18 +544,24 @@ class Table:
     # ---------------------------------------------------------- public API
 
     def human_action(self, action: str, amount: int | None = None) -> None:
-        if self.actor_seat != HUMAN_SEAT:
+        self.human_action_for(HUMAN_SEAT, action, amount)
+
+    def human_action_for(self, seat: int, action: str, amount: int | None = None) -> None:
+        if seat not in self.human_seats:
+            raise GameError('That seat is not controlled by a human player.')
+        if self.actor_seat != seat:
             raise GameError('It is not your turn.')
 
         self.frames = []
-        self.apply(HUMAN_SEAT, action, amount if action == 'raise' else None)
+        self.frames_by_viewer = {human: [] for human in self.human_seats}
+        self.apply(seat, action, amount if action == 'raise' else None)
         self.run_bots()
 
     def next_hand(self) -> None:
         self.start_hand()
 
-    def legal_actions(self) -> dict | None:
-        if self.actor_seat != HUMAN_SEAT:
+    def legal_actions(self, viewer_seat: int = HUMAN_SEAT) -> dict | None:
+        if self.actor_seat != viewer_seat:
             return None
 
         state = self.state
@@ -554,12 +579,12 @@ class Table:
             } if can_raise else None,
         }
 
-    def seat_view(self, seat: int) -> dict:
+    def seat_view(self, seat: int, viewer_seat: int = HUMAN_SEAT) -> dict:
         info = self.seats[seat]
         index = self.index_of(seat)
         in_hand = index is not None
         live = in_hand and self.state.status
-        show_cards = in_hand and (seat == HUMAN_SEAT or seat in self.revealed)
+        show_cards = in_hand and (seat == viewer_seat or seat in self.revealed)
 
         if not in_hand:
             status = 'out'
@@ -585,33 +610,51 @@ class Table:
         }
 
     def view(self) -> dict:
+        return self.view_for(HUMAN_SEAT)
+
+    def view_for(self, viewer_seat: int) -> dict:
         state = self.state
         street = state.street_index
         actor = self.actor_seat
+        order = list(range(viewer_seat, len(self.seats))) + list(range(viewer_seat))
+        display_seat = {seat: index for index, seat in enumerate(order)}
+        result = self.result
+        if result is not None:
+            result = dict(result)
+            result['winners'] = [dict(winner, seat=display_seat[winner['seat']])
+                                for winner in result['winners']]
+            if any(winner['seat'] == 0 for winner in result['winners']):
+                winner = next(w for w in result['winners'] if w['seat'] == 0)
+                result['headline'] = f'You win {money(winner["net"])}!'
+            elif self.multiplayer and result['winners']:
+                winner = max(result['winners'], key=lambda item: item['net'])
+                result['headline'] = f'{winner["name"]} wins {money(winner["net"])}.'
+            result['human_net'] = state.payoffs[self.index_of(viewer_seat)] if self.index_of(viewer_seat) is not None else 0
 
         return {
             'difficulty': self.difficulty,
             'hand_number': self.hand_number,
             'blinds': [SMALL_BLIND, BIG_BLIND],
-            'seats': [self.seat_view(seat) for seat in range(SEAT_COUNT)],
+            'viewer_seat': 0,
+            'seats': [self.seat_view(seat, viewer_seat) for seat in order],
             'board': [card_code(c) for c in self.board],
-            'human_hand': hand_label(self.hole.get(HUMAN_SEAT, []), self.board)
-            if HUMAN_SEAT not in self.folded else None,
+            'human_hand': hand_label(self.hole.get(viewer_seat, []), self.board)
+            if viewer_seat not in self.folded else None,
             'street': STREET_NAMES[street] if street is not None else 'Showdown',
             'pot': state.total_pot_amount if state.status else 0,
-            'to_act': actor,
-            'legal': self.legal_actions(),
+            'to_act': display_seat.get(actor) if actor is not None else None,
+            'legal': self.legal_actions(viewer_seat),
             'log': list(self.log),
             'hand_over': self.hand_over,
-            'result': self.result,
+            'result': result,
             'game_over': self.game_over,
-            'human_won_game': self.game_over and self.seats[HUMAN_SEAT].stack > 0,
+            'human_won_game': self.game_over and self.seats[viewer_seat].stack > 0,
         }
 
-    def response(self) -> dict:
+    def response(self, viewer_seat: int = HUMAN_SEAT) -> dict:
         """The final view plus every intermediate frame for animation."""
 
-        view = self.view()
-        frames = self.frames[:-1] if self.frames else []
+        view = self.view_for(viewer_seat)
+        frames = self.frames_by_viewer.get(viewer_seat, self.frames)[:-1]
 
         return {'frames': frames, 'view': view}

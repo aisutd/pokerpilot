@@ -137,6 +137,45 @@ class TableTest(unittest.TestCase):
         self.assertEqual(table.button, table.next_active(first))
         self.assertEqual(table.order[-1], table.button)
 
+    def test_two_humans_play_a_private_card_hand(self) -> None:
+        table = Table('medium', seed=17, human_names=['Alice', 'Bob'], bot_count=0)
+        self.assertEqual(len(table.seats), 2)
+        view_alice = table.view_for(0)
+        view_bob = table.view_for(1)
+        self.assertIsNotNone(view_alice['seats'][0]['cards'])
+        self.assertIsNone(view_alice['seats'][1]['cards'])
+        self.assertIsNotNone(view_bob['seats'][0]['cards'])
+        self.assertIsNone(view_bob['seats'][1]['cards'])
+        initial_bob_frame = table.frames_by_viewer[1][0]
+        self.assertEqual(initial_bob_frame['seats'][0]['name'], 'Bob')
+        self.assertIsNone(initial_bob_frame['seats'][1]['cards'])
+        actor = table.actor_seat
+        self.assertEqual(table.view_for(actor)['to_act'], 0)
+
+        wrong_seat = (actor + 1) % 2
+        with self.assertRaises(GameError):
+            table.human_action_for(wrong_seat, 'check_call')
+
+        while not table.hand_over:
+            actor = table.actor_seat
+            table.human_action_for(actor, 'check_call')
+
+        self.assertTrue(table.hand_over)
+        self.assertIsNotNone(table.result)
+        self.assertEqual(sum(seat.stack for seat in table.seats), 2 * STARTING_STACK)
+
+    def test_six_human_seats_are_supported(self) -> None:
+        names = ['A', 'B', 'C', 'D', 'E', 'F']
+        table = Table('easy', seed=8, human_names=names, bot_count=0)
+        self.assertEqual(len(table.seats), 6)
+        for viewer in range(6):
+            view = table.view_for(viewer)
+            self.assertEqual(view['seats'][0]['name'], names[viewer])
+            self.assertIsNotNone(view['seats'][0]['cards'])
+            for seat in view['seats'][1:]:
+                self.assertIsNone(seat['cards'])
+        self.assertEqual(len(table.response(viewer_seat=1)['frames']), len(table.frames) - 1)
+
 
 if __name__ == '__main__':
     unittest.main()
