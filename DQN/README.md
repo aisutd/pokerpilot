@@ -40,7 +40,7 @@ $PY scripts/train.py --stage online --out runs/scratch           # online only
 $PY scripts/evaluate.py --hands 10000 \
     --checkpoint runs/offline_online/offline_best.pt \
     --checkpoint runs/offline_online/online_best.pt \
-    --checkpoint runs/scratch/online_best.pt                    # writes results/
+    --checkpoint runs/scratch/online_best.pt                    # writes outputs/
 $PY -W error::UserWarning -m unittest discover -s tests -t .    # all tests (~5 min)
 ```
 
@@ -251,5 +251,5 @@ DQN/
   tests/           unittest suites
   data/processed/  preprocessing output (git-ignored; regenerate)
   runs/            checkpoints and training logs (git-ignored)
-  results/         evaluation.md / evaluation.json / curves_*.csv
+  outputs/         result reports: k-fold cross-validation and the two adaptive training runs
 ```
