@@ -99,8 +99,12 @@ export GEMINI_API_KEY="your-key-here"
 python app.py
 ```
 
-Start a game in the browser, click **Ask AI Advisor** on your turn, and verify
-that a plain-language explanation appears. Set `GEMINI_MODEL` only if you want a
+Start a game in the browser, choose **XGBoost + Gemini** or **DQN + Gemini**
+in the advisor selector, then click **Ask AI Advisor** on your turn. Verify that
+a plain-language explanation appears. The XGBoost version uses
+`pokerpilot_model/action_model.json` plus `sizing_model.json` to choose the
+action and amount, while Gemini only explains that result. The DQN version uses
+its trained checkpoint instead. Set `GEMINI_MODEL` only if you want a
 model other than `gemini-2.5-flash`. Do not commit the key. Without the key or
 if Gemini fails, the endpoint still returns its built-in fallback explanation.
 

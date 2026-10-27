@@ -182,6 +182,43 @@ class WebsiteAdvisorTest(unittest.TestCase):
             matches.pop(match_id, None)
             match_chat_rooms.pop(match_id, None)
 
+    def test_advisor_endpoint_accepts_xgboost_selection(self) -> None:
+        table = Table('medium', seed=82)
+        while table.hand_over:
+            table.next_hand()
+        self.assertEqual(table.actor_seat, HUMAN_SEAT)
+
+        match_id = f'xgb-test-{id(self)}'
+        client = app.test_client()
+        with client.session_transaction() as flask_session:
+            flask_session['match_id'] = match_id
+        matches[match_id] = (table, time.time())
+
+        fake_recommendation = {
+            'action': 'check_call',
+            'amount': None,
+            'label': 'Check / Call',
+            'probabilities': {'fold': 0.1, 'check': 0.6, 'call': 0.3},
+            'advisor': 'xgboost',
+            'model_action': 'check',
+            'explanation_state': {},
+        }
+        try:
+            with patch('app.xgboost_advice', return_value=fake_recommendation), patch(
+                'app.gemini_explanation',
+                return_value='Check first because no bet requires an immediate call.',
+            ):
+                response = client.post('/api/advice', json={'model': 'xgboost'})
+
+            self.assertEqual(response.status_code, 200)
+            recommendation = response.get_json()
+            self.assertEqual(recommendation['advisor'], 'xgboost')
+            self.assertIn(recommendation['action'], {'fold', 'check_call', 'raise'})
+            self.assertIsInstance(recommendation['explanation'], str)
+        finally:
+            matches.pop(match_id, None)
+            match_chat_rooms.pop(match_id, None)
+
 
 if __name__ == '__main__':
     unittest.main()

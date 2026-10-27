@@ -647,7 +647,9 @@ async function requestAdvice() {
   showError(null);
 
   try {
-    const recommendation = await api('/api/advice', {});
+    const recommendation = await api('/api/advice', {
+      model: $('advisor-model').value,
+    });
     if (requestId !== adviceRequest) return;
     $('dqn-advice-result').textContent =
       `${recommendation.label}${recommendation.explanation ? ` — ${recommendation.explanation}` : ''}`;

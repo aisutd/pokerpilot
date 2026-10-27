@@ -180,6 +180,11 @@
         <div class="hand-strength" id="hand-strength"></div>
 
         <div class="dqn-advisor">
+          <label for="advisor-model">Advisor:</label>
+          <select id="advisor-model" aria-label="Choose AI advisor">
+            <option value="xgboost">XGBoost + Gemini</option>
+            <option value="dqn">DQN + Gemini</option>
+          </select>
           <button id="dqn-advice" class="ghost" type="button">Ask AI Advisor</button>
           <p id="dqn-advice-result" role="status" hidden></p>
         </div>

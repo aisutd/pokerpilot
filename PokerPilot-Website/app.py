@@ -15,6 +15,9 @@ import time
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, session
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
 from engine.bots import DIFFICULTIES
 from engine.game import HUMAN_SEAT, GameError, Table
@@ -34,7 +37,7 @@ matches_lock = threading.Lock()
 match_chat_rooms: dict[str, str] = {}
 
 
-def gemini_explanation(view: dict, action: str, label: str) -> str:
+def gemini_explanation(view: dict, action: str, label: str, advisor: str = 'DQN') -> str:
     """Turn the numerical poker recommendation into a concise plain-language explanation."""
     api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
     if not api_key:
@@ -47,6 +50,7 @@ def gemini_explanation(view: dict, action: str, label: str) -> str:
 You are a poker coach helping a beginner. Explain the recommended action in plain English.
 Use 2-4 short sentences. Do not use equations, percentages, mathematical notation, or DQN/Q-values.
 Mention the most important table factors naturally, but do not claim certainty about hidden cards.
+Advisor model: {advisor}
 Recommended action: {label}
 Table state (JSON):
 {json.dumps(view, ensure_ascii=False)[:6000]}
@@ -61,6 +65,41 @@ Table state (JSON):
     except Exception:
         app.logger.exception('Gemini explanation generation failed.')
         return f"The advisor recommends {label.lower()}. Review your position and the betting action before choosing."
+
+
+def xgboost_advice(match: Table) -> dict:
+    """Run PokerPilot's trained XGBoost action and sizing models for one live table state."""
+    try:
+        from engine.opponent_models import load_xgboost, table_state
+    except ImportError as error:
+        raise RuntimeError('XGBoost advisor dependencies are not installed.') from error
+
+    state = table_state(match, HUMAN_SEAT)
+    predict = load_xgboost()
+    probabilities, size_fraction = predict(state)
+    predicted_action = max(probabilities, key=probabilities.get)
+
+    view = match.bot_view(HUMAN_SEAT)
+    if predicted_action == 'fold':
+        action, amount, label = 'fold', None, 'Fold'
+    elif predicted_action in ('check', 'call'):
+        action, amount, label = 'check_call', None, 'Check / Call'
+    else:
+        legal = match.legal_actions()['raise']
+        raw_amount = view.my_bet + size_fraction * view.pot
+        amount = int(max(legal['min'], min(legal['max'], round(raw_amount))))
+        action, label = 'raise', f'Raise to ${amount / 100:,.2f}'
+
+    probability_map = {key: round(value, 4) for key, value in probabilities.items()}
+    return {
+        'action': action,
+        'amount': amount,
+        'label': label,
+        'probabilities': probability_map,
+        'advisor': 'xgboost',
+        'model_action': predicted_action,
+        'explanation_state': state,
+    }
 
 
 def prune() -> None:
@@ -178,11 +217,33 @@ def state():
 
 @app.post('/api/advice')
 def advice():
+    payload = request.get_json(silent=True) or {}
+    advisor = payload.get('model', 'dqn').lower()
+    if advisor not in {'dqn', 'xgboost'}:
+        raise GameError('AI advisor must be one of: dqn, xgboost.')
+
     match = current_match()
 
     with match.lock:
         if match.actor_seat != HUMAN_SEAT:
             raise GameError('The AI advisor is available only on your turn.')
+
+        if advisor == 'xgboost':
+            try:
+                recommendation = xgboost_advice(match)
+            except (ImportError, RuntimeError, ValueError, FileNotFoundError) as error:
+                app.logger.exception('XGBoost advisor failed.')
+                return jsonify({'error': str(error)}), 503
+
+            explanation = gemini_explanation(
+                recommendation.pop('explanation_state'),
+                recommendation['action'],
+                recommendation['label'],
+                advisor='XGBoost',
+            )
+            recommendation['explanation'] = explanation
+            return jsonify(recommendation)
+
         if not ADVISOR_CHECKPOINT.is_file():
             return jsonify({
                 'error': 'No trained DQN checkpoint is installed. Train the agent first.',
@@ -221,12 +282,13 @@ def advice():
         else:
             label = f'Raise to ${amount / 100:,.2f}'
 
-        explanation = gemini_explanation(match.view(), action, label)
+        explanation = gemini_explanation(match.view(), action, label, advisor='DQN')
         return jsonify({
             'action': action,
             'amount': amount,
             'label': label,
             'q_value_bb': q_values[chosen],
+            'advisor': 'dqn',
             'explanation': explanation,
         })
 
