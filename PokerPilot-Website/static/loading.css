@@ -1,0 +1,192 @@
+/* ===================================================================
+   LOADING - "Dealing you in": rotating gold arcs, orbiting aces & chip
+   =================================================================== */
+
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: clamp(10px, 4vh, 48px) clamp(10px, 4vw, 64px);
+  background:
+    radial-gradient(ellipse at 50% 0%, #1b2635 0%, #121a25 55%, #0d131b 100%);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+#loading .loading-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: clamp(18px, 3vw, 44px);
+  background:
+    radial-gradient(circle at 50% 50%, #0e141b 0%, #0a0f15 60%, #090d12 100%);
+  border: 1px solid rgba(255, 255, 255, .04);
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, .55), 0 30px 80px rgba(0, 0, 0, .45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+#loading .loader {
+  position: relative;
+  width: min(72vmin, 640px);
+  aspect-ratio: 1;
+}
+
+#loading .rings { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+#loading .ring { fill: none; stroke: #1b242e; stroke-width: 1.6; }
+#loading .ring.faint { stroke: #141b23; }
+
+#loading .arc {
+  fill: none;
+  stroke: #d99a2b;
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(230, 160, 50, .45));
+}
+
+#loading .arc.thin { stroke-width: 1.8; opacity: .75; }
+
+#loading .spin {
+  transform-origin: 320px 320px;
+  animation: loading-spin 7s linear infinite;
+}
+
+#loading .spin.reverse { animation-duration: 9s; animation-direction: reverse; }
+
+#loading .nodes circle { fill: #0b1016; stroke: #2a3541; stroke-width: 1.6; }
+
+/* fine tick ring around the spade */
+#loading .ticks {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 43%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: repeating-conic-gradient(#3a434f 0deg .7deg, transparent .7deg 3deg);
+  -webkit-mask: radial-gradient(circle, transparent 0 79%, #000 80% 100%);
+  mask: radial-gradient(circle, transparent 0 79%, #000 80% 100%);
+  opacity: .8;
+  animation: loading-spin 40s linear infinite;
+}
+
+#loading .center-spade {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 19%;
+  transform: translate(-50%, -52%);
+  fill: #1f242b;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .7));
+  animation: loading-breathe 2.4s ease-in-out infinite;
+}
+
+/* orbiting items */
+#loading .orbit {
+  position: absolute;
+  inset: 0;
+  animation: loading-spin 6s cubic-bezier(.45, .05, .55, .95) infinite;
+}
+
+#loading .chip-orbit { animation-duration: 9s; animation-delay: -1.2s; animation-timing-function: linear; }
+
+#loading .orbit-cards {
+  position: absolute;
+  left: 50%;
+  top: 8.1%;
+  transform: translate(-50%, -50%) rotate(14deg);
+  width: 19%;
+  aspect-ratio: 1.15;
+}
+
+#loading .mini-card {
+  position: absolute;
+  width: 62%;
+  aspect-ratio: 5 / 7;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #fffdf6, #efe7d4);
+  box-shadow: 0 0 0 1px rgba(140, 110, 50, .45), 0 10px 20px rgba(0, 0, 0, .55);
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  color: #1d1a14;
+  padding: 6% 0 0 9%;
+  line-height: .9;
+  font-size: clamp(9px, 1.5vmin, 15px);
+}
+
+#loading .mini-card span,
+#loading .mini-card b { display: block; }
+
+#loading .mini-card b { font-weight: 400; font-size: .85em; }
+
+#loading .back-card {
+  left: 0;
+  top: 8%;
+  transform: rotate(-16deg);
+  color: #b3151d;
+}
+
+#loading .back-card em {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-style: normal;
+  font-size: 2.6em;
+}
+
+#loading .front-card { right: 0; top: 0; color: #8a6a24; }
+
+#loading .front-card svg {
+  position: absolute;
+  left: 50%;
+  top: 54%;
+  width: 52%;
+  transform: translate(-50%, -50%);
+}
+
+#loading .orbit-chip {
+  position: absolute;
+  left: 50%;
+  top: 1.9%;
+  width: 5.2%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotateX(55deg);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #1d2733 0 38%, #e9eef5 39% 42%, #1d2733 43% 60%, transparent 61%),
+    repeating-conic-gradient(#e9eef5 0deg 14deg, #1d2733 14deg 45deg);
+  box-shadow: 0 0 0 1.5px #0d1218, 0 6px 10px rgba(0, 0, 0, .6);
+}
+
+#loading .loading-text {
+  margin: clamp(14px, 3vh, 34px) 0 0;
+  color: #8b95a2;
+  font-size: clamp(11px, 1.2vw, 15px);
+  font-weight: 500;
+  letter-spacing: .38em;
+  text-indent: .38em;
+  animation: loading-fade 2.4s ease-in-out infinite;
+}
+
+@keyframes loading-spin { to { transform: rotate(360deg); } }
+
+@keyframes loading-breathe {
+  0%, 100% { opacity: .8; }
+  50% { opacity: 1; }
+}
+
+@keyframes loading-fade {
+  0%, 100% { opacity: .65; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #loading .spin, #loading .orbit, #loading .ticks { animation-duration: 30s; }
+}
