@@ -102,10 +102,29 @@ def load_style_distribution(
     return dict(counts)
 
 
-def legal_action_mask(table: Table) -> np.ndarray:
+def _raise_limits(table: Table, seat: int) -> dict | None:
+    """Legal action info for ``seat`` (the human's or a bot's turn)."""
+
+    if seat == HUMAN_SEAT:
+        return table.legal_actions()
+    if table.actor_seat != seat:
+        return None
+
+    state = table.state
+    can_raise = state.can_complete_bet_or_raise_to()
+    return {
+        'fold': state.checking_or_calling_amount > 0,
+        'raise': {
+            'min': state.min_completion_betting_or_raising_to_amount,
+            'max': state.max_completion_betting_or_raising_to_amount,
+        } if can_raise else None,
+    }
+
+
+def legal_action_mask(table: Table, seat: int = HUMAN_SEAT) -> np.ndarray:
     """Return one True/False value per action; False actions are never selectable."""
 
-    legal = table.legal_actions()
+    legal = _raise_limits(table, seat)
     if legal is None:
         return np.zeros(ACTION_COUNT, dtype=np.bool_)
 
@@ -122,13 +141,16 @@ def _card_index(card: object) -> int:
     return RANKS.index(rank) * len(SUITS) + SUITS.index(suit)
 
 
-def observation_from_table(table: Table) -> np.ndarray:
-    """Encode only the agent's cards and public table/opponent statistics."""
+def observation_from_table(table: Table, seat: int = HUMAN_SEAT) -> np.ndarray:
+    """Encode only the agent's cards and public table/opponent statistics.
 
-    if table.actor_seat != HUMAN_SEAT:
+    ``seat`` is the seat the agent plays (the human seat for the advisor,
+    a bot seat when the DQN is chosen as the opponents' model)."""
+
+    if table.actor_seat != seat:
         raise RuntimeError('The agent observation is only available on its turn.')
 
-    view = table.bot_view(HUMAN_SEAT)
+    view = table.bot_view(seat)
     state = np.zeros(STATE_SIZE, dtype=np.float32)
 
     for card in view.hole:
@@ -141,7 +163,7 @@ def observation_from_table(table: Table) -> np.ndarray:
     state[offset + view.street] = 1.0
     offset += STREET_FEATURE_COUNT
 
-    relative_seat = (HUMAN_SEAT - table.button) % SEAT_COUNT
+    relative_seat = (seat - table.button) % SEAT_COUNT
     state[offset] = math.cos(2 * math.pi * relative_seat / SEAT_COUNT)
     state[offset + 1] = math.sin(2 * math.pi * relative_seat / SEAT_COUNT)
     offset += POSITION_FEATURE_COUNT
@@ -149,10 +171,11 @@ def observation_from_table(table: Table) -> np.ndarray:
     opponents = view.opponents
     opponent_count = len(opponents)
     opponent_states = table.view()['seats']
+    seat_number = seat
     opponent_stacks = [
         seat['stack']
         for seat_index, seat in enumerate(opponent_states)
-        if seat_index != HUMAN_SEAT and seat['status'] in {'active', 'all-in'}
+        if seat_index != seat_number and seat['status'] in {'active', 'all-in'}
     ]
     effective_stack_bb = (
         min(view.my_stack, max(opponent_stacks)) / BIG_BLIND
@@ -194,7 +217,9 @@ def observation_from_table(table: Table) -> np.ndarray:
     return state
 
 
-def action_to_engine_action(table: Table, action_index: int) -> tuple[str, int | None]:
+def action_to_engine_action(
+        table: Table, action_index: int, seat: int = HUMAN_SEAT,
+) -> tuple[str, int | None]:
     """Convert a legal DQN action into the engine's existing action format."""
 
     if (
@@ -204,7 +229,7 @@ def action_to_engine_action(table: Table, action_index: int) -> tuple[str, int |
     ):
         raise ValueError(f'Unknown DQN action index: {action_index!r}.')
     action_index = int(action_index)
-    if not legal_action_mask(table)[action_index]:
+    if not legal_action_mask(table, seat)[action_index]:
         raise ValueError(f'Illegal DQN action: {ACTION_NAMES[action_index]}.')
 
     if action_index == 0:
@@ -212,8 +237,8 @@ def action_to_engine_action(table: Table, action_index: int) -> tuple[str, int |
     if action_index == 1:
         return 'check_call', None
 
-    raise_limits = table.legal_actions()['raise']
-    bot_view = table.bot_view(HUMAN_SEAT)
+    raise_limits = _raise_limits(table, seat)['raise']
+    bot_view = table.bot_view(seat)
     low, high = raise_limits['min'], raise_limits['max']
     if action_index == 2:
         amount = low

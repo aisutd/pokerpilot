@@ -57,13 +57,13 @@ The chat API listens on port 3000. Set `VITE_CHAT_WS_URL` before building the
 client if the WebSocket server is hosted at a different URL.
 
 Run the poker and DQN tests with
-`python -m unittest tests.test_game tests.test_chat_room tests.test_dqn_model`
+`python -m unittest tests.test_game tests.test_chat_room tests.test_dqn_model tests.test_opponent_models`
 (from this folder, inside the virtual environment), and the chat relay test
 with `npm test --prefix ../chat-api`.
 
 ## How to play
 
-1. Pick **Easy**, **Medium** or **Hard** in the lobby.
+1. Pick the **Opponent AI** model, then **Easy**, **Medium** or **Hard** in the lobby.
 2. You sit at a six-seat table with five AI players: MathNinja,
    CardShark88, RiverRat, LuckyLlama and TiltMaster. Everyone starts with
    $200; blinds are $1/$2. The dealer button moves clockwise every hand.
@@ -81,6 +81,26 @@ corner while a game is active. It uses the React chat UI and WebSocket API
 from the `websockets` branch, including emoji selection. Each game gets a
 private chat room; chat messages are only broadcast to clients connected to
 that game's room.
+
+## Opponent AI (PvE)
+
+Above the difficulty cards, **Opponent AI** picks which model drives the five
+AI players:
+
+| Model        | What it is |
+|--------------|------------|
+| Classic Bots | The hand-written strategy in `engine/bots.py` (default). |
+| XGBoost      | The team model in [`../pokerpilot_model`](../pokerpilot_model), trained to play like the dataset's winning players. The game builds the same features the model was trained on (hand strength, pot odds, position, opponent stats, ...) for each decision. |
+| DQN          | Surya's agent in [`dqn_model_surya/`](./dqn_model_surya/). Locked until a checkpoint is trained. |
+
+A model that can't load yet (missing package or trained file) shows a lock,
+and hovering it says what's missing. With an ML model, difficulty sets how
+closely the bots follow it: **Hard** almost always takes the model's best
+action, **Medium** samples from its probabilities, **Easy** plays loosely and
+blunders more. Each character's personality still nudges the model (TiltMaster
+bets more, RiverRat folds less).
+
+To add another model, see the notes at the top of `engine/opponent_models.py`.
 
 ## Difficulty
 
@@ -103,6 +123,7 @@ see your hole cards.
 app.py            Flask server and JSON API
 engine/game.py    6-max table logic on top of pokerkit's State
 engine/bots.py    AI players (skill levels and personalities)
+engine/opponent_models.py  Opponent AI picker: XGBoost and DQN bots
 static/           Lobby, loading screen and table (HTML/CSS/JS, no build step)
 ../client/        React chat UI (built into client/dist for Flask to serve)
 ../chat-api/      Node.js WebSocket chat relay (port 3000)
@@ -116,7 +137,8 @@ Amounts are integer cents.
 
 | Method | Path          | Body |
 |--------|---------------|------|
-| POST   | `/api/new`    | `{"difficulty": "easy\|medium\|hard"}` |
+| GET    | `/api/models` | none (lists the opponent AI models and whether each is ready) |
+| POST   | `/api/new`    | `{"difficulty": "easy\|medium\|hard", "model": "rules\|xgboost\|dqn"}` (`model` defaults to `rules`) |
 | GET    | `/api/state`  | none |
 | POST   | `/api/advice` | `{}` (requires a trained DQN checkpoint) |
 | POST   | `/api/action` | `{"action": "fold\|check_call\|raise", "amount": 4500}` |

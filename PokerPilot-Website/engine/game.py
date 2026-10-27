@@ -108,17 +108,28 @@ class Seat:
 
 
 class Table:
-    def __init__(self, difficulty: str, seed: int | None = None) -> None:
+    def __init__(self, difficulty: str, seed: int | None = None, model: str = 'rules') -> None:
+        # Imported here because opponent_models imports this module.
+        from .opponent_models import OPPONENT_MODELS, ModelUnavailable, create_opponent
+
         if difficulty not in DIFFICULTIES:
             raise GameError(f'Unknown difficulty: {difficulty!r}')
+
+        if model not in OPPONENT_MODELS:
+            raise GameError(f'Unknown AI model: {model!r}')
 
         self.lock = threading.Lock()
         self.rng = random.Random(seed)
         self.difficulty = difficulty
+        self.model = model
         self.seats = [Seat('You', None, 'teal', None)]
 
         for character in CHARACTERS:
-            bot = create_bot(difficulty, character, random.Random(self.rng.random()))
+            try:
+                bot = create_opponent(model, difficulty, character, random.Random(self.rng.random()))
+            except ModelUnavailable as error:
+                raise GameError(str(error)) from error
+
             self.seats.append(Seat(character.name, character.avatar, character.color, bot))
 
         self.hand_number = 0
@@ -216,6 +227,9 @@ class Table:
         self.preflop_raiser: int | None = None
         self.raises_this_street = 0
         self.last_action: dict[int, str] = {}
+        # Public action history by street, used by the ML opponents:
+        # street_actions[street] = [(seat, 'check'|'call'|'bet'|'raise'|'fold'), ...]
+        self.street_actions: list[list[tuple[int, str]]] = [[]]
         self.vpip_seen: set[int] = set()
         self.pfr_seen: set[int] = set()
 
@@ -300,6 +314,7 @@ class Table:
                 self.log.append(f'--- {name}: {cards} ---')
                 self.raises_this_street = 0
                 self.last_action = {}
+                self.street_actions.append([])
             elif isinstance(op, HoleCardsShowingOrMucking):
                 seat = self.order[op.player_index]
                 name = self.seats[seat].name
@@ -384,6 +399,15 @@ class Table:
         stats = self.seats[seat].stats
         facing_bet = state.checking_or_calling_amount > 0
         preflop = state.street_index == 0
+
+        if action == 'fold':
+            kind = 'fold'
+        elif action == 'check_call':
+            kind = 'call' if facing_bet else 'check'
+        else:
+            kind = 'bet' if max(state.bets) == 0 else 'raise'
+
+        self.street_actions[-1].append((seat, kind))
 
         # Fold-to-bet only counts after the flop; preflop folds are just
         # unplayable hands.
@@ -508,7 +532,13 @@ class Table:
     def run_bots(self) -> None:
         while (seat := self.actor_seat) is not None and seat != HUMAN_SEAT:
             bot = self.seats[seat].bot
-            action, amount = bot.decide(self.bot_view(seat))
+
+            # ML opponents need the whole table (positions, action history);
+            # the classic bots only get the BotView.
+            if hasattr(bot, 'decide_at_table'):
+                action, amount = bot.decide_at_table(self, seat)
+            else:
+                action, amount = bot.decide(self.bot_view(seat))
             state = self.state
 
             # Never fold for free, and fall back to calling on bad sizes.
@@ -591,6 +621,7 @@ class Table:
 
         return {
             'difficulty': self.difficulty,
+            'model': self.model,
             'hand_number': self.hand_number,
             'blinds': [SMALL_BLIND, BIG_BLIND],
             'seats': [self.seat_view(seat) for seat in range(SEAT_COUNT)],

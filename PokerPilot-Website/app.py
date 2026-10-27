@@ -17,6 +17,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 from engine.bots import DIFFICULTIES
 from engine.game import HUMAN_SEAT, GameError, Table
+from engine.opponent_models import OPPONENT_MODELS, list_models
 
 STATIC_DIR = Path(__file__).parent / 'static'
 CHAT_BUILD_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
@@ -101,15 +102,26 @@ def chat_room():
     return jsonify({'room': room_id})
 
 
+@app.get('/api/models')
+def models():
+    """AI models the player can pick for the opponents, and which are ready."""
+
+    return jsonify({'models': list_models()})
+
+
 @app.post('/api/new')
 def new_match():
     payload = request.get_json(silent=True) or {}
     difficulty = payload.get('difficulty')
+    model = payload.get('model', 'rules')
 
     if difficulty not in DIFFICULTIES:
         raise GameError(f'Difficulty must be one of: {", ".join(DIFFICULTIES)}.')
 
-    match = Table(difficulty)
+    if model not in OPPONENT_MODELS:
+        raise GameError(f'AI model must be one of: {", ".join(OPPONENT_MODELS)}.')
+
+    match = Table(difficulty, model=model)
     match_id = secrets.token_urlsafe(16)
 
     with matches_lock:
