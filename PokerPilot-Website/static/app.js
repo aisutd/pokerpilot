@@ -18,6 +18,9 @@ let seatEls = null;
 let chatRequest = 0;
 let adviceRequest = 0;
 let adviceBusy = false;
+let models = [];             // from /api/models
+let selectedModel = 'rules'; // which AI model the opponents use
+const MODEL_KEY = 'pokerpilot.model';
 
 // ------------------------------------------------------------- helpers
 
@@ -306,7 +309,7 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
 
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const difficulty = v.difficulty[0].toUpperCase() + v.difficulty.slice(1);
-  $('street').textContent = `${v.hand_over ? 'Hand over' : v.street} · ${difficulty}`;
+  $('street').textContent = `${v.hand_over ? 'Hand over' : v.street} · ${difficulty} · ${modelLabel(v.model)}`;
   const chatPlayers = v.seats.map((seat) => seat.name).join(' · ');
   $('chat-player-names').textContent = chatPlayers;
   $('chat-player-names').title = chatPlayers;
@@ -524,7 +527,67 @@ async function send(path, body) {
   }
 }
 
-async function startGame(difficulty) {
+// ------------------------------------------------------- AI model picker
+
+function modelLabel(key) {
+  const model = models.find((m) => m.key === key);
+  return model ? model.label : key;
+}
+
+function renderModels() {
+  const box = $('model-options');
+  box.replaceChildren();
+
+  for (const model of models) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'model-option';
+    button.setAttribute('role', 'radio');
+    button.dataset.model = model.key;
+    button.textContent = model.label;
+    button.disabled = !model.available;
+    button.setAttribute('aria-checked', String(model.key === selectedModel));
+    button.title = model.available ? model.description : model.reason;
+
+    if (!model.available) {
+      const lock = document.createElement('span');
+      lock.className = 'lock';
+      lock.setAttribute('aria-hidden', 'true');
+      lock.textContent = '🔒';
+      button.append(lock);
+    }
+
+    button.addEventListener('click', () => selectModel(model.key));
+    box.append(button);
+  }
+
+  const current = models.find((m) => m.key === selectedModel);
+  $('model-description').textContent = current ? current.description : '';
+}
+
+function selectModel(key) {
+  const model = models.find((m) => m.key === key);
+  if (!model || !model.available) return;
+  selectedModel = key;
+  try { localStorage.setItem(MODEL_KEY, key); } catch { /* storage blocked */ }
+  renderModels();
+}
+
+async function loadModels() {
+  try {
+    ({ models } = await api('/api/models'));
+  } catch {
+    models = [{ key: 'rules', label: 'Classic Bots', description: '', available: true }];
+  }
+
+  let saved = null;
+  try { saved = localStorage.getItem(MODEL_KEY); } catch { /* storage blocked */ }
+  const usable = (key) => models.some((m) => m.key === key && m.available);
+  selectedModel = usable(saved) ? saved : 'rules';
+  renderModels();
+}
+
+async function startGame(difficulty, model = selectedModel) {
   if (busy) return;
   clearAdvice();
   disconnectChat();
@@ -537,7 +600,7 @@ async function startGame(difficulty) {
   let response = null;
 
   try {
-    [response] = await Promise.all([api('/api/new', { difficulty }), sleep(LOADING_MIN_MS)]);
+    [response] = await Promise.all([api('/api/new', { difficulty, model }), sleep(LOADING_MIN_MS)]);
     showScreen('game');
     connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     await playFrames(response.frames, myEpoch);
@@ -610,7 +673,7 @@ $('btn-call').addEventListener('click', () => act('check_call'));
 $('btn-raise').addEventListener('click', () => act('raise'));
 $('dqn-advice').addEventListener('click', requestAdvice);
 $('next-hand').addEventListener('click', () => send('/api/next', {}));
-$('play-again').addEventListener('click', () => startGame(view.difficulty));
+$('play-again').addEventListener('click', () => startGame(view.difficulty, view.model));
 
 $('raise-caret').addEventListener('click', () => {
   const caret = $('raise-caret');
@@ -682,6 +745,8 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'r') act('raise');
   else if (key === 'n' && view && view.hand_over && !view.game_over && !busy) send('/api/next', {});
 });
+
+loadModels();
 
 // Resume a game in progress after a page reload.
 api('/api/state')

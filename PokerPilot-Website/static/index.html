@@ -71,6 +71,15 @@
       <div class="cardbox right"></div>
     </div>
 
+    <div class="model-picker" role="radiogroup" aria-labelledby="model-picker-label">
+      <span id="model-picker-label" class="model-picker-label">OPPONENT AI</span>
+      <div id="model-options" class="model-options">
+        <!-- Filled from /api/models by app.js; this is the fallback. -->
+        <button type="button" class="model-option" role="radio" data-model="rules" aria-checked="true">Classic Bots</button>
+      </div>
+      <p id="model-description" class="model-description"></p>
+    </div>
+
     <nav class="modes" aria-label="Choose a difficulty">
       <button class="mode" data-difficulty="easy">
         <span class="play-card tilt-left">
@@ -224,7 +233,7 @@
       <p id="game-over-text"></p>
       <div class="modal-buttons">
         <button id="play-again" class="act next">Play again</button>
-        <button id="to-lobby" class="ghost">Change difficulty</button>
+        <button id="to-lobby" class="ghost">Back to lobby</button>
       </div>
     </div>
   </div>
