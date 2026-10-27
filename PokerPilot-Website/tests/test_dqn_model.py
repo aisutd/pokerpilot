@@ -20,7 +20,7 @@ from dqn_model_surya.env import (
     legal_action_mask,
     load_style_distribution,
 )
-from dqn_model_surya.evaluate import evaluate
+from dqn_model_surya.evaluate import _outcome_percentages, evaluate
 from dqn_model_surya.model import QNetwork, masked_q_values
 from dqn_model_surya.replay_buffer import ReplayBuffer
 from dqn_model_surya.train import choose_action, epsilon_at_step
@@ -134,6 +134,11 @@ class DQNEnvironmentTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'at least 10,000 hands'):
             evaluate(Path('not-needed.pt'), 9_999, 2507)
 
+    def test_evaluation_reports_profitable_break_even_and_losing_hand_rates(self) -> None:
+        percentages = _outcome_percentages([2.0, 0.0, -1.0, 3.0, -4.0])
+
+        self.assertEqual(percentages, (40.0, 20.0, 40.0))
+
 
 class WebsiteAdvisorTest(unittest.TestCase):
     def test_advisor_endpoint_returns_a_legal_recommendation(self) -> None:
@@ -157,13 +162,18 @@ class WebsiteAdvisorTest(unittest.TestCase):
                     'action_count': ACTION_COUNT,
                     'action_names': list(ACTION_NAMES),
                 }, checkpoint)
-                with patch('app.ADVISOR_CHECKPOINT', checkpoint):
+                with patch('app.ADVISOR_CHECKPOINT', checkpoint), patch(
+                    'app.gemini_explanation',
+                    return_value='The advisor prefers this action based on the current table.',
+                ):
                     response = client.post('/api/advice', json={})
 
             self.assertEqual(response.status_code, 200)
             recommendation = response.get_json()
             self.assertIn(recommendation['action'], {'fold', 'check_call', 'raise'})
             self.assertIsInstance(recommendation['q_value_bb'], float)
+            self.assertIsInstance(recommendation['explanation'], str)
+            self.assertTrue(recommendation['explanation'])
             if recommendation['action'] == 'raise':
                 self.assertTrue(table.state.can_complete_bet_or_raise_to(
                     recommendation['amount'],
