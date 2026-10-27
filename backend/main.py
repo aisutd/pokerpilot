@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 import sys
 from pathlib import Path
-ssys.path.append(str(Path(__file__).resolve().parent.parent / "pokerpilot_model"))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "pokerpilot_model"))
 from predict import PokerPilotModel
 
 load_dotenv()  

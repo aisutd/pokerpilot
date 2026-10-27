@@ -1,0 +1,8 @@
+**/.git
+**/.DS_Store
+**/__pycache__
+**/*.pyc
+**/venv
+**/.venv
+**/.env
+pokerpilot_model/data

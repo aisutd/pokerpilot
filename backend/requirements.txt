@@ -2,3 +2,7 @@ fastapi
 uvicorn[standard]
 openai
 python-dotenv
+numpy
+pandas
+xgboost
+scikit-learn
