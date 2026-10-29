@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@400;500;600&family=Jersey+15&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/lobby.css">
   <link rel="stylesheet" href="/static/loading.css">
   <link rel="stylesheet" href="/static/style.css">
@@ -172,45 +172,38 @@
 
   <!-- ============================== GAME =============================== -->
   <section id="game" class="screen" hidden>
-    <header class="topbar">
-      <button id="quit" class="ghost">&larr; Leave</button>
-      <div class="hand-info"><span id="room-tag"></span> &middot; <span id="hand-number"></span> &middot; <span id="street"></span></div>
-      <div class="topbar-right">
-        <div class="seat-stepper" id="game-seat-stepper" hidden>
-          <span class="label">Seats</span>
-          <button data-seats="-1" aria-label="Remove a seat">&minus;</button>
-          <strong class="seat-count"></strong>
-          <button data-seats="1" aria-label="Add a seat">+</button>
-        </div>
-        <button id="history-toggle" class="ghost" aria-expanded="false" aria-controls="history">History</button>
-      </div>
-    </header>
-
-    <div class="arena">
+    <!-- Laid out like the team's table mock-up (chip_table_images): on wide
+         screens the stage has the table art's shape and everything sits on it. -->
+    <div class="stage" id="stage">
       <div class="table-area" id="table-area">
-        <div class="poker-table">
-          <div class="felt-line"></div>
-          <div class="table-center">
+        <div class="poker-table"><div class="felt-line"></div></div>
+        <div class="table-center">
+          <div class="pot-wrap">
+            <div class="pot-chips" id="pot-chips" aria-hidden="true"></div>
             <div class="pot" id="pot"></div>
-            <div class="board" id="board"></div>
-            <div class="result-toast" id="result-toast" hidden></div>
           </div>
+          <div class="board" id="board"></div>
         </div>
         <!-- seats and bet chips are rendered by app.js -->
         <div id="seats"></div>
       </div>
 
-      <div class="controls" id="controls">
-        <div class="hand-strength" id="hand-strength"></div>
+      <div class="center-msgs">
+        <div class="result-toast" id="result-toast" hidden></div>
+        <div class="status" id="status">
+          <span class="hand-strength" id="hand-strength"></span>
+          <span class="waiting" id="waiting" hidden></span>
+          <span class="hand-done" id="hand-done" hidden>
+            <span id="next-in"></span>
+            <button id="rebuy" class="act next" hidden>Rebuy $200</button>
+          </span>
+        </div>
+        <p id="game-error" class="game-error" hidden></p>
+      </div>
 
-        <div class="actions" id="actions" hidden>
-          <div class="action-row">
-            <button id="btn-fold" class="act fold">Fold</button>
-            <button id="btn-call" class="act call"><span id="call-label">Check</span><span id="call-amount" class="amount"></span></button>
-            <div class="raise-group">
-              <button id="btn-raise" class="act raise"><span id="raise-label">Raise</span></button>
-              <button id="raise-caret" class="caret" aria-label="Show bet sizes" aria-expanded="true">&#8964;</button>
-            </div>
+      <div class="controls" id="controls">
+        <div class="raise-tray" id="raise-tray" hidden>
+          <div class="tray-row">
             <input type="range" id="raise-slider" aria-label="Bet size">
             <div class="amount-box">
               <span>$</span>
@@ -225,15 +218,52 @@
             <button data-preset="max"></button>
           </div>
         </div>
-
-        <div class="waiting" id="waiting" hidden></div>
-
-        <div class="hand-done" id="hand-done" hidden>
-          <span id="next-in"></span>
-          <button id="rebuy" class="act next" hidden>Rebuy $200</button>
+        <div class="actions" id="actions" hidden>
+          <button id="btn-check" class="act">Check</button>
+          <button id="btn-fold" class="act">Fold</button>
+          <button id="btn-call" class="act"><span id="call-label">Call</span><span id="call-amount" class="amount"></span></button>
+          <button id="btn-raise" class="act raise" aria-expanded="false" aria-controls="raise-tray"><span id="raise-label">Bet / Raise</span></button>
         </div>
+      </div>
 
-        <p id="game-error" class="game-error" hidden></p>
+      <nav class="hud" aria-label="Table buttons">
+        <button id="chat-toggle" class="hud-btn" aria-expanded="false" aria-controls="chat-widget" aria-label="Table chat" title="Table chat">
+          <span class="hud-icon chat-icon">
+            <svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><path fill="#ffd34d" d="M2 2h8v1h1v5h-1v1H6L4 11V9H2V8H1V3h1z"/><path fill="#5a0f15" d="M3 4h6v1H3zm0 2h4v1H3z"/></svg>
+          </span>
+          <span class="hud-label">Chat</span>
+        </button>
+        <button id="menu-toggle" class="hud-btn" aria-expanded="false" aria-controls="menu-panel">
+          <img class="hud-icon" src="/static/art/icon-menu.png" alt=""><span class="hud-label">Menu</span>
+        </button>
+        <button id="settings-toggle" class="hud-btn" aria-expanded="false" aria-controls="settings-panel">
+          <img class="hud-icon" src="/static/art/icon-settings.png" alt=""><span class="hud-label">Settings</span>
+        </button>
+        <button id="sound-toggle" class="hud-btn" aria-pressed="true">
+          <img class="hud-icon" src="/static/art/icon-sound.png" alt=""><span class="hud-label">Sound</span>
+        </button>
+      </nav>
+
+      <div class="popover" id="menu-panel" hidden>
+        <h2>Room <strong id="room-tag"></strong></h2>
+        <p class="hand-info"><span id="hand-number"></span> &middot; <span id="street"></span></p>
+        <button id="copy-invite" class="pop-btn">Copy invite link</button>
+        <button id="history-toggle" class="pop-btn" aria-expanded="false" aria-controls="history">Hand history</button>
+        <div class="seat-stepper" id="game-seat-stepper" hidden>
+          <span class="label">Seats</span>
+          <button data-seats="-1" aria-label="Remove a seat">&minus;</button>
+          <strong class="seat-count"></strong>
+          <button data-seats="1" aria-label="Add a seat">+</button>
+        </div>
+        <button id="quit" class="pop-btn leave">Leave room</button>
+      </div>
+
+      <div class="popover" id="settings-panel" hidden>
+        <h2>Settings</h2>
+        <label class="setting"><input type="checkbox" data-setting="sound"> Sound effects</label>
+        <label class="setting"><input type="checkbox" data-setting="hint"> Name my hand (e.g. "One pair")</label>
+        <label class="setting"><input type="checkbox" data-setting="presets"> Bet size shortcuts</label>
+        <label class="setting"><input type="checkbox" data-setting="stats"> Player stats on the plates</label>
       </div>
     </div>
 

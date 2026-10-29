@@ -46,6 +46,10 @@ MAX_NAME = 16
 STREET_NAMES = ('Preflop', 'Flop', 'Turn', 'River')
 MODES = ('pvp', 'pve')
 HUMAN_COLORS = ('teal', 'yellow', 'red', 'indigo', 'blue')
+# Player portraits, static/art/portraits/p1.png to p10.png. Each AI player
+# has its own; people get a free one, the AI players' faces last.
+BOT_PORTRAITS = {'MathNinja': 5, 'CardShark88': 9, 'RiverRat': 10, 'LuckyLlama': 7, 'TiltMaster': 8}
+HUMAN_PORTRAITS = (1, 2, 3, 4, 6, 5, 9, 10, 7, 8)
 
 TURN_SECONDS = 30
 AWAY_SECONDS = 4  # turn clock for players who disconnected or left
@@ -127,6 +131,7 @@ class Player:
     token: str
     name: str
     color: str
+    portrait: int
     account_id: str | int | None = None
     seat: int | None = None
     left: bool = False  # left mid-hand; removed when the hand ends
@@ -141,6 +146,7 @@ class Seat:
     token: str | None = None  # the player sitting here; None for AI players
     stack: int = STARTING_STACK
     stats: PlayerStats = field(default_factory=PlayerStats)
+    portrait: int | None = None
 
 
 class Room:
@@ -249,8 +255,11 @@ class Room:
             name = self.clean_name(name)
             used = {p.color for p in self.present()}
             color = next((c for c in HUMAN_COLORS if c not in used), HUMAN_COLORS[len(self.players) % len(HUMAN_COLORS)])
+            faces = {p.portrait for p in self.present()} | {s.portrait for s in self.seats if s is not None}
+            portrait = next((n for n in HUMAN_PORTRAITS if n not in faces),
+                            HUMAN_PORTRAITS[len(self.players) % len(HUMAN_PORTRAITS)])
             token = secrets.token_urlsafe(16)
-            player = Player(token, name, color, account_id=account_id)
+            player = Player(token, name, color, portrait, account_id=account_id)
             self.players[token] = player
 
             if self.host is None:
@@ -271,7 +280,7 @@ class Room:
             return token
 
     def sit(self, player: Player, seat: int) -> None:
-        self.seats[seat] = Seat(player.name, None, player.color, token=player.token)
+        self.seats[seat] = Seat(player.name, None, player.color, token=player.token, portrait=player.portrait)
         player.seat = seat
 
     def remove(self, player: Player) -> None:
@@ -582,13 +591,17 @@ class Room:
 
         if self.mode == 'pve':
             used = {seat.name for seat in self.seats if seat is not None}
-            spare = [c for c in CHARACTERS if c.name not in used]
+            faces = {seat.portrait for seat in self.seats if seat is not None}
+            # AI players whose face someone already has come last.
+            spare = sorted((c for c in CHARACTERS if c.name not in used),
+                           key=lambda c: BOT_PORTRAITS[c.name] in faces)
 
             for i in range(len(self.seats)):
                 if self.seats[i] is None and spare:
                     character = spare.pop(0)
                     bot = create_bot(self.difficulty, character, random.Random(self.rng.random()))
-                    self.seats[i] = Seat(character.name, character.avatar, character.color, bot)
+                    self.seats[i] = Seat(character.name, character.avatar, character.color, bot,
+                                         portrait=BOT_PORTRAITS[character.name])
 
     def deal(self) -> None:
         self.tidy()
@@ -1041,7 +1054,7 @@ class Room:
 
         if info is None:
             return {
-                'name': 'Open seat', 'avatar': None, 'color': 'teal', 'kind': 'empty',
+                'name': 'Open seat', 'avatar': None, 'portrait': None, 'color': 'teal', 'kind': 'empty',
                 'stack': 0, 'bet': 0, 'cards': None, 'has_cards': False, 'status': 'empty',
                 'is_button': False, 'stats': [0, 0, 0], 'last_action': None, 'away': False,
             }
@@ -1066,6 +1079,7 @@ class Room:
         return {
             'name': info.name,
             'avatar': info.avatar,
+            'portrait': info.portrait,
             'color': info.color,
             'kind': 'bot' if info.bot is not None else 'human',
             'stack': self.state.stacks[index] if live else info.stack,
@@ -1087,6 +1101,7 @@ class Room:
             return {
                 'name': seat.name,
                 'avatar': seat.avatar,
+                'portrait': seat.portrait,
                 'color': seat.color,
                 'kind': 'bot' if seat.bot is not None else 'human',
                 'host': token is not None and token == self.host,

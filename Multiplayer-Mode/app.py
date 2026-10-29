@@ -10,13 +10,17 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
+from urllib.request import Request, urlopen
 
+import simple_websocket
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, redirect, request, send_from_directory, url_for
 from flask_sock import ConnectionClosed, Sock
@@ -34,6 +38,9 @@ STATIC_DIR = Path(__file__).parent / 'static'
 CARD_ASSET_DIR = ROOT_DIR / 'Assets' / 'Cards'
 CHAT_BUILD_DIR = Path(__file__).parent / 'client' / 'dist'  # npm run build --prefix client
 PORT = int(os.environ.get('PORT', 5001))
+CHAT_API_URL = os.environ.get('CHAT_API_URL', 'ws://127.0.0.1:3000/')
+NGROK_API = 'http://127.0.0.1:4040/api/tunnels'  # the ngrok agent's local API
+TUNNEL_CHECK_SECONDS = 5
 MAX_ROOMS = 200
 IDLE_SECONDS = 30 * 60  # rooms with nobody connected are closed after this
 CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'  # no I or O, they look like 1 and 0
@@ -86,6 +93,64 @@ def lan_address() -> str | None:
         return None
 
 
+def ngrok_tunnels() -> list[dict] | None:
+    """The running ngrok agent's tunnels, or None if no agent is running."""
+
+    try:
+        with urlopen(NGROK_API, timeout=2) as response:
+            return json.load(response)['tunnels']
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def public_url() -> str | None:
+    """This server's public ngrok link, if a tunnel to it is open."""
+
+    for tunnel in ngrok_tunnels() or []:
+        if tunnel.get('proto') == 'https' and tunnel['config']['addr'].endswith(f':{PORT}'):
+            return tunnel['public_url']
+
+    return None
+
+
+def keep_tunnel() -> None:
+    """Keep an ngrok tunnel to this server open the whole time it runs, so
+    friends anywhere can join. Starts ngrok, and starts it again or reopens
+    the tunnel if it goes away. An existing tunnel is reused, so the link
+    survives server restarts."""
+
+    ngrok = shutil.which('ngrok')
+
+    if ngrok is None:
+        print('ngrok is not installed, so there is no public link (see README).', flush=True)
+        return
+
+    process = None
+    announced = None
+
+    while True:
+        url = public_url()
+
+        if url is None:
+            try:
+                if ngrok_tunnels() is not None:
+                    body = json.dumps({'name': f'pokerpilot-{PORT}', 'proto': 'http', 'addr': str(PORT)})
+                    urlopen(Request(NGROK_API, body.encode(), {'Content-Type': 'application/json'}), timeout=5).close()
+                elif process is None or process.poll() is not None:
+                    process = subprocess.Popen(
+                        [ngrok, 'http', str(PORT), '--log', 'false'],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                    )
+            except OSError as error:
+                print(f'ngrok: {error}', flush=True)
+        elif url != announced:
+            print(f'Public link (ngrok): {url}', flush=True)
+            announced = url
+
+        time.sleep(TUNNEL_CHECK_SECONDS)
+
+
 @app.errorhandler(GameError)
 def handle_game_error(error: GameError):
     return jsonify({'error': str(error)}), 400
@@ -93,6 +158,14 @@ def handle_game_error(error: GameError):
 
 @app.get('/')
 def index():
+    # Opened on this PC or the Wi-Fi address: move to the public ngrok link,
+    # so the address bar always shows the link friends can use. Requests
+    # that came through ngrok carry X-Forwarded-For and are served as usual.
+    local = request.host.rsplit(':', 1)[0] in ('localhost', '127.0.0.1', lan_address())
+
+    if local and 'X-Forwarded-For' not in request.headers and (url := public_url()):
+        return redirect(url + request.full_path.rstrip('?'))
+
     try:
         if get_user() is None:
             target = request.full_path.rstrip('?')
@@ -109,7 +182,8 @@ def card_deck_asset():
 
 
 # The team's chat box (client/, built with Vite) talks to the chat-api relay
-# on port 3000; the page embeds it with the room's private chat id.
+# on port 3000 through /chat-ws below; the page embeds it with the room's
+# private chat id.
 @app.get('/chat')
 @app.get('/chat/')
 @require_auth
@@ -122,11 +196,55 @@ def chat_asset(filename: str):
     return send_from_directory(CHAT_BUILD_DIR, filename)
 
 
+@sock.route('/chat-ws')
+def chat_relay(ws):
+    """Pass chat traffic through to chat-api, so the chat works over the same
+    address and port as the game (LAN, or a tunnel such as ngrok). Signed-in
+    players only, like the game socket."""
+
+    origin = request.headers.get('Origin')
+    if origin and urlsplit(origin).netloc.lower() != request.host.lower():
+        ws.close(1008, 'Cross-origin WebSocket rejected')
+        return
+
+    try:
+        user = get_user(request.cookies.get(SESSION_COOKIE))
+    except Exception:
+        app.logger.exception('WebSocket authentication storage is unavailable.')
+        ws.close(1011, 'Authentication storage unavailable')
+        return
+    if user is None:
+        ws.close(1008, 'Authentication required')
+        return
+
+    try:
+        upstream = simple_websocket.Client.connect(f"{CHAT_API_URL}?room={quote(request.args.get('room', ''))}")
+    except (OSError, simple_websocket.ConnectionError):
+        return
+
+    def forward_replies():
+        try:
+            while True:
+                ws.send(upstream.receive())
+        except ConnectionClosed:
+            ws.close()
+
+    threading.Thread(target=forward_replies, daemon=True).start()
+
+    try:
+        while True:
+            upstream.send(ws.receive())
+    except ConnectionClosed:
+        pass
+    finally:
+        upstream.close()
+
+
 @app.get('/api/info')
 def info():
     address = lan_address()
 
-    return jsonify({'lan_url': f'http://{address}:{PORT}' if address else None})
+    return jsonify({'lan_url': f'http://{address}:{PORT}' if address else None, 'public_url': public_url()})
 
 
 @app.post('/api/rooms')
@@ -269,5 +387,6 @@ add_logout_hook(app, close_logged_out_user)
 
 
 if __name__ == '__main__':
+    threading.Thread(target=keep_tunnel, daemon=True).start()
     # 0.0.0.0 lets phones and other computers on the same Wi-Fi connect.
     app.run(host=os.environ.get('HOST', '0.0.0.0'), port=PORT, threaded=True)
