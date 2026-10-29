@@ -21,6 +21,10 @@ const RECONNECT_MS = [500, 1000, 2000, 4000];
 const REQUEST_TIMEOUT_MS = 15000;
 const LOADING_MIN_MS = 2000; // the loading screen stays up at least this long
 
+const SETTINGS_KEY = 'pokerpilot-settings';
+// Matches the phone layout in style.css.
+const narrow = window.matchMedia('(max-width: 860px) and (orientation: portrait)');
+
 const $ = (id) => document.getElementById(id);
 
 let latest = null; // last state message from the server
@@ -31,6 +35,7 @@ let socket = null;
 let session = null; // { code, token }
 let retries = 0;
 let lanUrl = null;
+let publicUrl = null; // ngrok link, works from anywhere
 let clock = null; // { end, total } in performance.now() milliseconds
 
 // ------------------------------------------------------------- helpers
@@ -46,6 +51,15 @@ function moneyShort(cents) {
     ? { maximumFractionDigits: 0 }
     : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
   return `$${(cents / 100).toLocaleString('en-US', options)}`;
+}
+
+// Chip sprite for an amount, by casino colours: white $1, red $5, blue $10,
+// green $25, black $100, purple $500, yellow $1,000.
+const CHIP_VALUES = [[100000, 'yellow'], [50000, 'purple'], [10000, 'black'], [2500, 'green'], [1000, 'blue'], [500, 'red']];
+
+function chipColor(cents) {
+  const found = CHIP_VALUES.find(([value]) => cents >= value);
+  return found ? found[1] : 'white';
 }
 
 function prettyCard(code) {
@@ -116,6 +130,98 @@ function loadSession() {
   } catch {
     return null;
   }
+}
+
+// ------------------------------------------------------------- settings
+
+const settings = { sound: true, hint: true, presets: true, stats: false };
+
+try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY))); } catch { /* defaults */ }
+
+function applySettings() {
+  document.body.classList.toggle('show-stats', settings.stats);
+  document.body.classList.toggle('hide-presets', !settings.presets);
+  document.querySelectorAll('[data-setting]').forEach((box) => { box.checked = Boolean(settings[box.dataset.setting]); });
+  $('sound-toggle').setAttribute('aria-pressed', String(settings.sound));
+  $('sound-toggle').title = settings.sound ? 'Sound on' : 'Sound off';
+}
+
+function changeSetting(name, value) {
+  settings[name] = value;
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* ignore */ }
+  applySettings();
+  if (view) render(view);
+}
+
+// ---------------------------------------------------------------- sound
+
+// Short synthesized effects: cards, chips, your turn, a win. Browsers only
+// allow audio after the page is touched, so the context starts on the
+// first click or key.
+let audio = null;
+
+function unlockAudio() {
+  if (audio) return;
+  try { audio = new AudioContext(); } catch { audio = null; }
+}
+
+document.addEventListener('pointerdown', unlockAudio, { once: true });
+document.addEventListener('keydown', unlockAudio, { once: true });
+
+function tone(freq, start, length, type = 'square', volume = .05) {
+  const osc = audio.createOscillator();
+  const gain = audio.createGain();
+  const t = audio.currentTime + start;
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  gain.gain.setValueAtTime(volume, t);
+  gain.gain.exponentialRampToValueAtTime(.0001, t + length);
+  osc.connect(gain).connect(audio.destination);
+  osc.start(t);
+  osc.stop(t + length);
+}
+
+function swish(start) {
+  const length = .07;
+  const buffer = audio.createBuffer(1, Math.ceil(audio.sampleRate * length), audio.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  const source = audio.createBufferSource();
+  const filter = audio.createBiquadFilter();
+  const gain = audio.createGain();
+  source.buffer = buffer;
+  filter.type = 'bandpass';
+  filter.frequency.value = 2800;
+  gain.gain.value = .25;
+  source.connect(filter).connect(gain).connect(audio.destination);
+  source.start(audio.currentTime + start);
+}
+
+function playSound(kind) {
+  if (!settings.sound || !audio) return;
+  try {
+    if (audio.state === 'suspended') audio.resume();
+    if (kind === 'card') swish(0);
+    else if (kind === 'chip') { tone(2300, 0, .05); tone(1750, .05, .06); }
+    else if (kind === 'turn') { tone(660, 0, .14, 'sine', .08); tone(880, .12, .2, 'sine', .08); }
+    else if (kind === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * .1, .18, 'square', .04));
+  } catch { /* no sound is fine */ }
+}
+
+let heard = null; // the last view we made sounds for
+
+function soundsFor(v) {
+  const before = heard;
+  heard = v;
+  if (!before || before.hand_number !== v.hand_number) {
+    if (before && v.seats.some((seat) => seat.has_cards)) playSound('card');
+    return;
+  }
+  if (v.board.length > before.board.length) playSound('card');
+  else if (v.seats.some((seat, i) => seat.bet > (before.seats[i] ? before.seats[i].bet : 0))) playSound('chip');
+  if (v.legal && !before.legal) playSound('turn');
+  const won = v.result && v.result.winners.some((w) => w.seat === v.me);
+  if (v.hand_over && !before.hand_over && won) playSound('win');
 }
 
 // ----------------------------------------------------------- connection
@@ -199,6 +305,19 @@ function handle(message) {
 // relay itself; the room only hands each member its private chat id.
 let chatRoom = null; // the chat id the frame is showing
 let chatToggled = false; // the player minimized or expanded it themselves
+let chatOpen = false; // at the table it shows only after the chat button
+
+function showChat(status) {
+  const atTable = status !== 'lobby';
+  $('chat-widget').hidden = atTable && !chatOpen;
+  $('chat-widget').classList.toggle('at-table', atTable);
+  $('chat-toggle').setAttribute('aria-expanded', String(chatOpen));
+  if (atTable) {
+    if (chatOpen) setChatMinimized(false);
+  } else if (!chatToggled) {
+    setChatMinimized(true); // tucked away in the waiting room
+  }
+}
 
 function setChatMinimized(minimized) {
   $('chat-widget-content').hidden = minimized;
@@ -215,10 +334,7 @@ function connectChat(message) {
   }
 
   $('chat-player-names').textContent = `Poker game: ${message.room.code}`;
-  $('chat-widget').hidden = false;
-  // Tucked away in the waiting room and on small screens (it would cover the
-  // table), open at the table otherwise, unless the player chose.
-  if (!chatToggled) setChatMinimized(message.room.status === 'lobby' || window.innerWidth < 1100);
+  showChat(message.room.status);
   if (room === chatRoom) return;
 
   chatRoom = room;
@@ -231,6 +347,8 @@ function connectChat(message) {
 function disconnectChat() {
   chatRoom = null;
   chatToggled = false;
+  chatOpen = false;
+  $('chat-toggle').setAttribute('aria-expanded', 'false');
   $('chat-frame').src = 'about:blank';
   $('chat-widget').hidden = true;
 }
@@ -269,8 +387,19 @@ function setupChatControls() {
   handle.addEventListener('pointercancel', stopDragging);
 
   $('chat-minimize').addEventListener('click', () => {
+    if (latest && latest.room.status !== 'lobby') {
+      chatOpen = false; // at the table, minimizing closes it; the chat button opens it
+      showChat(latest.room.status);
+      return;
+    }
     chatToggled = true;
     setChatMinimized(!$('chat-widget-content').hidden);
+  });
+
+  $('chat-toggle').addEventListener('click', () => {
+    if (!latest || !chatRoom) return;
+    chatOpen = !chatOpen;
+    showChat(latest.room.status);
   });
 
   window.addEventListener('resize', () => {
@@ -292,7 +421,10 @@ function backToLobby(error) {
   view = null;
   seatEls = null;
   busy = false;
+  heard = null;
   toggleHistory(false);
+  closePanels();
+  setTray(false);
   showScreen('lobby');
   showPanel('join');
   showError(error);
@@ -338,7 +470,8 @@ async function enterRoom(path, body) {
 }
 
 function inviteLink(code) {
-  return `${lanUrl && location.hostname.match(/^(localhost|127\.)/) ? lanUrl : location.origin}/?room=${code}`;
+  const local = location.hostname.match(/^(localhost|127\.)/);
+  return `${publicUrl || (lanUrl && local ? lanUrl : location.origin)}/?room=${code}`;
 }
 
 function renderRoom(message) {
@@ -354,8 +487,8 @@ function renderRoom(message) {
 
   const items = room.seats.map((member) => {
     const li = document.createElement('li');
-    const dot = document.createElement('span');
-    dot.className = 'dot';
+    const face = document.createElement('span');
+    face.className = 'face';
     const who = document.createElement('span');
     who.className = 'seat-who';
 
@@ -366,11 +499,11 @@ function renderRoom(message) {
       return li;
     }
 
-    dot.dataset.color = member.color;
+    face.dataset.portrait = member.portrait;
     who.textContent = member.name;
     li.classList.toggle('you', member.you);
     li.classList.toggle('away', member.away);
-    li.append(dot, who);
+    li.append(face, who);
     const tag = member.host ? 'Host' : member.away ? 'Away' : member.you ? 'You' : '';
     if (tag) li.append(Object.assign(document.createElement('small'), { textContent: tag }));
     return li;
@@ -417,9 +550,28 @@ function renderStepper(el, room, you, canRemove) {
 
 // --------------------------------------------------------------- cards
 
-function cardElement(code) {
+// Where the pips go on number cards, as [x, y] percentages of the pip area.
+// Pips below the middle are drawn upside down, as on real cards.
+const PIPS = {
+  A: [[50, 50]],
+  2: [[50, 0], [50, 100]],
+  3: [[50, 0], [50, 50], [50, 100]],
+  4: [[0, 0], [100, 0], [0, 100], [100, 100]],
+  5: [[0, 0], [100, 0], [50, 50], [0, 100], [100, 100]],
+  6: [[0, 0], [100, 0], [0, 50], [100, 50], [0, 100], [100, 100]],
+  7: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [0, 100], [100, 100]],
+  8: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [50, 75], [0, 100], [100, 100]],
+  9: [[0, 0], [100, 0], [0, 33], [100, 33], [50, 50], [0, 67], [100, 67], [0, 100], [100, 100]],
+  T: [[0, 0], [100, 0], [50, 17], [0, 33], [100, 33], [0, 67], [100, 67], [50, 83], [0, 100], [100, 100]],
+};
+
+function suitGlyph(suit) {
+  return Object.assign(document.createElement('i'), { textContent: SUITS[suit] });
+}
+
+function cardElement(code, mini) {
   const el = document.createElement('div');
-  el.className = 'card';
+  el.className = mini ? 'card mini' : 'card';
 
   if (!code) {
     el.classList.add('back');
@@ -432,25 +584,51 @@ function cardElement(code) {
     return el;
   }
 
-  if (RED_SUITS.has(code[1])) el.classList.add('red');
+  const [rank, suit] = code;
+  const label = rank === 'T' ? '10' : rank;
+  if (RED_SUITS.has(suit)) el.classList.add('red');
   el.setAttribute('aria-label', prettyCard(code));
 
-  const rank = document.createElement('span');
-  rank.className = 'rank';
-  rank.textContent = code[0] === 'T' ? '10' : code[0];
-  const suit = document.createElement('span');
-  suit.className = 'suit';
-  suit.textContent = SUITS[code[1]];
-  el.append(rank, suit);
+  const corner = (where) => {
+    const span = document.createElement('span');
+    span.className = `corner ${where}`;
+    span.setAttribute('aria-hidden', 'true');
+    span.append(label, suitGlyph(suit));
+    return span;
+  };
+  el.append(corner('tl'));
+  if (mini) return el;
+
+  if (PIPS[rank]) {
+    const pips = document.createElement('span');
+    pips.className = rank === 'A' ? 'pips ace' : 'pips';
+    pips.setAttribute('aria-hidden', 'true');
+    for (const [x, y] of PIPS[rank]) {
+      const pip = suitGlyph(suit);
+      pip.style.left = `${x}%`;
+      pip.style.top = `${y}%`;
+      if (y > 50) pip.className = 'flip';
+      pips.appendChild(pip);
+    }
+    el.appendChild(pips);
+  } else {
+    const court = document.createElement('span');
+    court.className = 'court';
+    court.setAttribute('aria-hidden', 'true');
+    court.append(label, suitGlyph(suit));
+    el.appendChild(court);
+  }
+
+  el.append(corner('br'));
   return el;
 }
 
-function renderCards(container, codes) {
+function renderCards(container, codes, mini = false) {
   // Rebuild only when the cards change, so the deal animation plays once.
   const key = JSON.stringify(codes);
   if (container.dataset.key === key) return;
   container.dataset.key = key;
-  container.replaceChildren(...codes.map(cardElement));
+  container.replaceChildren(...codes.map((code) => cardElement(code, mini)));
 }
 
 // --------------------------------------------------------------- seats
@@ -529,12 +707,15 @@ function renderSeats(v, thinkingSeat) {
     const mine = i === v.me;
     const empty = seat.status === 'empty';
 
-    parts.name.textContent = mine ? `${seat.name} (you)` : seat.name;
-    parts.el.dataset.color = seat.color;
-    parts.avatar.className = mine ? 'avatar you' : seat.avatar || empty ? 'avatar' : 'avatar initial';
-    parts.avatar.textContent = mine || empty ? '' : seat.avatar || seat.name[0].toUpperCase();
+    // Your plate is set apart by where it sits; in the narrow layout it says so.
+    parts.name.textContent = mine && narrow.matches ? `${seat.name} (you)` : seat.name;
+    // The portrait sets the face and the player's colour (style.css).
+    if (seat.portrait) parts.el.dataset.portrait = seat.portrait;
+    else delete parts.el.dataset.portrait;
+    parts.avatar.className = seat.portrait || empty ? 'avatar' : 'avatar initial';
+    parts.avatar.textContent = seat.portrait || empty ? '' : seat.name[0].toUpperCase();
 
-    parts.stack.textContent = empty ? 'Empty' : seat.status === 'out' ? 'Out' : money(seat.stack);
+    parts.stack.textContent = empty ? 'Empty' : seat.status === 'out' ? 'Out' : moneyShort(seat.stack);
     parts.stats.textContent = seat.stats.join(' / ');
     parts.dealer.hidden = !seat.is_button;
 
@@ -557,11 +738,12 @@ function renderSeats(v, thinkingSeat) {
     let cards = [];
     if (seat.cards) cards = seat.cards;
     else if (seat.has_cards) cards = [null, null];
-    renderCards(parts.cards, cards);
+    renderCards(parts.cards, cards, i !== 0);
     parts.cards.classList.toggle('up', Boolean(seat.cards) && i !== 0);
 
     parts.bet.hidden = !seat.bet;
     parts.bet.textContent = seat.bet ? moneyShort(seat.bet) : '';
+    parts.bet.dataset.chip = chipColor(seat.bet);
   });
 }
 
@@ -572,7 +754,7 @@ function render(v) {
   const you = latest.you;
   const thinking = v.to_act !== null && v.to_act !== v.me ? v.to_act : null;
 
-  $('room-tag').textContent = `Room ${latest.room.code}`;
+  $('room-tag').textContent = latest.room.code;
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const mode = v.mode === 'pve' ? `AI: ${capitalize(v.difficulty)}` : 'PvP';
   $('street').textContent = `${v.paused ? 'Paused' : v.hand_over ? 'Hand over' : v.street} · ${mode}`;
@@ -583,8 +765,10 @@ function render(v) {
   const board = [...v.board];
   while (board.length < 5) board.push('slot');
   renderCards($('board'), board);
-  $('pot').textContent = v.pot ? `Pot: ${money(v.pot)}` : '';
-  $('hand-strength').textContent = v.my_hand ? `You have ${v.my_hand}` : '';
+  $('pot').textContent = v.pot ? `Pot: ${moneyShort(v.pot)}` : '';
+  renderPotChips(v.pot);
+  $('hand-strength').textContent = handHint(v);
+  soundsFor(v);
 
   clock = v.clock !== null ? { end: performance.now() + v.clock * 1000, total: v.clock_total * 1000 } : null;
 
@@ -605,6 +789,23 @@ function render(v) {
     $('modal-rebuy').hidden = !you.can_rebuy;
     $('restart').hidden = !you.host;
   }
+}
+
+// The pile over the pot: more chips, and pricier colours, as it grows.
+function renderPotChips(pot) {
+  const pile = $('pot-chips');
+  const colors = !pot ? []
+    : [chipColor(pot), 'red', 'white', 'black', 'red'].slice(0, Math.min(5, 2 + Math.floor(pot / 1000)));
+  const key = colors.join();
+  if (pile.dataset.key === key) return;
+  pile.dataset.key = key;
+  pile.replaceChildren(...colors.map((color) => Object.assign(document.createElement('img'), {
+    src: `/static/art/chips/${color}.png`, alt: '',
+  })));
+}
+
+function handHint(v) {
+  return settings.hint && v.my_hand ? `You have ${v.my_hand}` : '';
 }
 
 function renderResult(v) {
@@ -649,6 +850,7 @@ function renderLog(v) {
 function renderControls(v, you, thinking) {
   const legal = !busy ? v.legal : null;
   $('actions').hidden = !legal;
+  if (!legal) setTray(false);
 
   const between = v.hand_over && !v.paused;
   $('hand-done').hidden = !(between || (you.can_rebuy && !v.paused));
@@ -668,26 +870,27 @@ function renderControls(v, you, thinking) {
 
   if (!legal) return;
 
-  $('btn-fold').disabled = !legal.fold;
-
+  // Check and call are separate buttons, as in the mock-up.
   const me = v.seats[v.me];
-  if (legal.check) {
-    $('call-label').textContent = 'Check';
-    $('call-amount').textContent = '';
-  } else {
-    $('call-label').textContent = legal.call >= me.stack ? 'All-in' : 'Call';
-    $('call-amount').textContent = money(legal.call);
-  }
+  $('btn-fold').disabled = !legal.fold;
+  $('btn-check').disabled = !legal.check;
+  $('btn-call').disabled = legal.check;
+  $('call-label').textContent = !legal.check && legal.call >= me.stack ? 'All-in' : 'Call';
+  $('call-amount').textContent = legal.check ? '' : moneyShort(legal.call);
 
   const raise = legal.raise;
-  for (const id of ['btn-raise', 'raise-slider', 'raise-input', 'raise-caret']) $(id).disabled = !raise;
-  document.querySelectorAll('[data-preset]').forEach((b) => { b.disabled = !raise; });
+  for (const id of ['btn-raise', 'raise-slider', 'raise-input']) $(id).disabled = !raise;
+
+  for (const b of document.querySelectorAll('[data-preset]')) {
+    b.disabled = !raise;
+    b.textContent = presetName(b.dataset.preset);
+    b.title = raise ? moneyShort(presetAmount(b.dataset.preset)) : '';
+  }
 
   if (!raise) {
-    $('raise-label').textContent = 'Raise';
+    setTray(false);
     $('raise-input').value = '';
     $('raise-slider').style.setProperty('--fill', '0%');
-    for (const b of document.querySelectorAll('[data-preset]')) b.textContent = presetName(b.dataset.preset);
     return;
   }
 
@@ -697,11 +900,20 @@ function renderControls(v, you, thinking) {
   slider.max = raise.max;
   slider.step = 1;
 
-  for (const b of document.querySelectorAll('[data-preset]')) {
-    b.textContent = `${presetName(b.dataset.preset)} (${moneyShort(presetAmount(b.dataset.preset))})`;
-  }
-
   setRaise(changed ? raise.min : Number(slider.value));
+}
+
+// BET / RAISE opens the sizing tray; pressing it again makes the bet.
+function trayOpen() {
+  return !$('raise-tray').hidden;
+}
+
+function setTray(open) {
+  $('raise-tray').hidden = !open;
+  $('btn-raise').setAttribute('aria-expanded', String(open));
+  const raise = view && view.legal && view.legal.raise;
+  if (raise) updateRaiseUi(Number($('raise-slider').value));
+  else $('raise-label').textContent = 'Bet / Raise';
 }
 
 // ---------------------------------------------------------------- clock
@@ -727,7 +939,7 @@ function tick() {
   const strength = $('hand-strength');
   const myTurn = view.legal && !busy && clock;
   strength.classList.toggle('your-turn', Boolean(myTurn));
-  const base = view.my_hand ? `You have ${view.my_hand}` : '';
+  const base = handHint(view);
   strength.textContent = myTurn ? `Your turn · ${seconds}s${base ? ` · ${base}` : ''}` : base;
 }
 
@@ -736,7 +948,7 @@ setInterval(tick, 200);
 // -------------------------------------------------------------- sizing
 
 function presetName(preset) {
-  return { min: 'Min', 0.5: '1/2 Pot', 0.75: '3/4 Pot', 1: 'Pot', max: 'All In' }[preset];
+  return { min: 'Min', 0.5: '½ Pot', 0.75: '¾ Pot', 1: 'Pot', max: 'All-in' }[preset];
 }
 
 function clampRaise(cents) {
@@ -770,7 +982,8 @@ function updateRaiseUi(amount) {
   const span = raise.max - raise.min;
   const fill = span > 0 ? ((amount - raise.min) / span) * 100 : 100;
   $('raise-slider').style.setProperty('--fill', `${fill}%`);
-  $('raise-label').textContent = amount === raise.max ? 'All-in' : raise.is_bet ? 'Bet' : 'Raise';
+  const verb = amount === raise.max ? 'All-in' : raise.is_bet ? 'Bet' : 'Raise to';
+  $('raise-label').textContent = trayOpen() ? `${verb} ${moneyShort(amount)}` : 'Bet / Raise';
 }
 
 function inputCents() {
@@ -787,15 +1000,23 @@ function act(action) {
   let message = { type: 'action', action };
 
   if (action === 'fold' && !legal.fold) return;
+  if (action === 'check' && !legal.check) return;
+  if (action === 'call' && legal.check) return;
+  if (action === 'check' || action === 'call') message.action = 'check_call';
 
   if (action === 'raise') {
     if (!legal.raise) return;
+    if (!trayOpen()) {
+      setTray(true); // first pick the size
+      return;
+    }
     message = { type: 'action', action: 'raise', amount: clampRaise(inputCents()) };
   }
 
   showError(null);
   if (sendMessage(message)) {
     busy = true;
+    setTray(false);
     render(view);
   }
 }
@@ -825,16 +1046,18 @@ $('player-name').addEventListener('keydown', (e) => {
   else $('create-room').click();
 });
 
-$('copy-link').addEventListener('click', async () => {
+async function copyInvite(button) {
   const link = inviteLink(latest.room.code);
   try {
     await navigator.clipboard.writeText(link);
-    $('copy-link').textContent = 'Copied!';
-    setTimeout(() => { $('copy-link').textContent = 'Copy invite link'; }, 1500);
+    button.textContent = 'Copied!';
+    setTimeout(() => { button.textContent = 'Copy invite link'; }, 1500);
   } catch {
     prompt('Copy this link:', link); // clipboard needs https or localhost
   }
-});
+}
+
+$('copy-link').addEventListener('click', () => copyInvite($('copy-link')));
 
 document.querySelectorAll('#room-panel [data-mode]').forEach((button) => {
   button.addEventListener('click', () => {
@@ -857,20 +1080,14 @@ document.querySelectorAll('[data-seats]').forEach((button) => {
 $('start-game').addEventListener('click', () => sendMessage({ type: 'start' }));
 $('leave-room').addEventListener('click', leaveRoom);
 
+$('btn-check').addEventListener('click', () => act('check'));
 $('btn-fold').addEventListener('click', () => act('fold'));
-$('btn-call').addEventListener('click', () => act('check_call'));
+$('btn-call').addEventListener('click', () => act('call'));
 $('btn-raise').addEventListener('click', () => act('raise'));
 $('rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('modal-rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('restart').addEventListener('click', () => sendMessage({ type: 'restart' }));
 $('to-lobby').addEventListener('click', leaveRoom);
-
-$('raise-caret').addEventListener('click', () => {
-  const caret = $('raise-caret');
-  const open = caret.getAttribute('aria-expanded') !== 'true';
-  caret.setAttribute('aria-expanded', String(open));
-  $('presets').hidden = !open;
-});
 
 $('raise-slider').addEventListener('input', (e) => {
   const amount = Number(e.target.value);
@@ -904,8 +1121,45 @@ function toggleHistory(open) {
   $('history-toggle').setAttribute('aria-expanded', String(open));
 }
 
-$('history-toggle').addEventListener('click', () => toggleHistory($('history').hidden));
+$('history-toggle').addEventListener('click', () => {
+  closePanels();
+  toggleHistory($('history').hidden);
+});
 $('history-close').addEventListener('click', () => toggleHistory(false));
+
+// MENU and SETTINGS open small panels over the table.
+const PANELS = { 'menu-toggle': 'menu-panel', 'settings-toggle': 'settings-panel' };
+
+function closePanels() {
+  for (const [button, panel] of Object.entries(PANELS)) {
+    $(panel).hidden = true;
+    $(button).setAttribute('aria-expanded', 'false');
+  }
+}
+
+for (const [button, panel] of Object.entries(PANELS)) {
+  $(button).addEventListener('click', () => {
+    const open = $(panel).hidden;
+    closePanels();
+    $(panel).hidden = !open;
+    $(button).setAttribute('aria-expanded', String(open));
+  });
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('.popover, .hud-btn')) closePanels();
+});
+
+document.querySelectorAll('[data-setting]').forEach((box) => {
+  box.addEventListener('change', () => changeSetting(box.dataset.setting, box.checked));
+});
+
+$('sound-toggle').addEventListener('click', () => {
+  changeSetting('sound', !settings.sound);
+  playSound('chip');
+});
+
+$('copy-invite').addEventListener('click', () => copyInvite($('copy-invite')));
 
 $('quit').addEventListener('click', () => {
   const me = view && view.me !== null ? view.seats[view.me] : null;
@@ -915,23 +1169,30 @@ $('quit').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') toggleHistory(false);
+  if (e.key === 'Escape') {
+    toggleHistory(false);
+    closePanels();
+    setTray(false);
+  }
   if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
   if ($('game').hidden) return;
 
   const key = e.key.toLowerCase();
   if (key === 'f') act('fold');
-  else if (key === 'c') act('check_call');
+  else if (key === 'c') act(view && view.legal && view.legal.check ? 'check' : 'call');
   else if (key === 'r') act('raise');
 });
 
 // ---------------------------------------------------------------- start
 
+applySettings();
+narrow.addEventListener('change', () => { if (view) render(view); });
+
 try { $('player-name').value = localStorage.getItem(NAME_KEY) || ''; } catch { /* ignore */ }
 const invited = new URLSearchParams(location.search).get('room');
 if (invited) $('join-code').value = invited.toUpperCase().slice(0, 5);
 
-api('/api/info').then((info) => { lanUrl = info.lan_url; }).catch(() => {});
+api('/api/info').then((info) => { lanUrl = info.lan_url; publicUrl = info.public_url; }).catch(() => {});
 
 // Rejoin the room after a reload (sessionStorage is per tab, so two tabs
 // can sit at the same table as different players).

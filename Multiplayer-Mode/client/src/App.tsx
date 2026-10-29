@@ -11,7 +11,7 @@ interface ChatMessage {
 }
 
 const CHAT_WS_BASE_URL = import.meta.env.VITE_CHAT_WS_URL
-  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3000`;
+  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/chat-ws`;
 
 function isChatMessage(message: unknown): message is ChatMessage {
   return typeof message === 'object'
