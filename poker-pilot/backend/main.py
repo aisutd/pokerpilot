@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-load_dotenv()  
+load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -18,7 +18,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,7 +32,7 @@ class UserInput(BaseModel):
 class PilotResponse(BaseModel):
     username: str
     message: str
-    source: str  
+    source: str
 
 
 
@@ -69,7 +69,7 @@ def pilot(data: UserInput):
     if not name:
         raise HTTPException(status_code=400, detail="Username can't be empty.")
 
-    
+
     if not OPENAI_API_KEY:
         return PilotResponse(
             username=name,
