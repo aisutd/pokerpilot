@@ -1,0 +1,133 @@
+:root { color-scheme: dark; font-family: Montserrat, Inter, system-ui, sans-serif; color: #f6eee0; background: #070203; --gold-1: #ffe7a6; --gold-2: #d9a441; --gold-3: #a8741f; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse 60% 45% at 50% 15%, rgba(70, 14, 14, .55), transparent 70%), linear-gradient(180deg, #160607 0%, #0d0405 45%, #070203 100%); }
+a { color: #d9a441; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid #d9a441; outline-offset: 5px; }
+.page { max-width: 1050px; margin: auto; padding: 30px 24px 60px; }
+.page-nav { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.brand { color: #f6eee0; font-weight: 800; font-size: 21px; }
+.back { font-size: 14px; }
+.intro { margin: 70px 0 35px; }
+.eyebrow { color: #d9a441; font-size: 12px; font-weight: 700; letter-spacing: .18em; }
+h1 { font-size: clamp(32px, 5vw, 54px); letter-spacing: -.04em; margin: 12px 0; }
+.intro > p:last-child, #description { color: #c4b5a0; line-height: 1.6; }
+.board { padding: 28px; border: 1px solid #705127; border-radius: 18px; background: #210b0d; box-shadow: 0 20px 65px #0003; }
+.board-header { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+h2 { margin: 0; font-size: 23px; }
+#refresh { background: transparent; color: #eadfca; padding: 9px 14px; border: 1px solid #705127; border-radius: 9px; }
+.tabs { display: inline-flex; margin-top: 24px; gap: 5px; padding: 4px; border-radius: 11px; background: #110507; }
+.tabs button { color: #eadfca; border: 0; background: transparent; padding: 10px 22px; border-radius: 8px; }
+.tabs button[aria-pressed="true"] { color: #1a0907; background: #d9a441; font-weight: 700; }
+#message { color: #d9a441; line-height: 1.6; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+th, td { text-align: right; padding: 18px 14px; border-bottom: 1px solid #ffffff14; }
+th { font-size: 12px; color: #c4b5a0; font-weight: 500; }
+th:nth-child(2), td:nth-child(2) { text-align: left; }
+td:first-child { color: #d9a441; font-weight: 700; }
+tr.is-you { background: #ffffff08; }
+.you { font-size: 11px; color: #d9a441; margin-left: 10px; }
+.positive { color: #65dfb5; }
+.negative { color: #ff97a5; }
+footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 25px; font-size: 12px; color: #c4b5a0; }
+.sr-only { position: absolute; height: 1px; width: 1px; overflow: hidden; clip-path: inset(50%); }
+[hidden] { display: none !important; }
+@media (max-width: 600px) { .page { padding: 22px 14px; } .intro { margin-top: 45px; } .board { padding: 18px 12px; } th, td { padding: 15px 10px; } h2 { font-size: 19px; } footer { flex-wrap: wrap; } }
+
+.gpi-source { margin-top: 24px; padding: 28px; border: 1px solid #d9a44150; border-radius: 12px; background: #150709; }
+.gpi-source h3 { font-size: 28px; margin: 12px 0; }
+.gpi-source p { max-width: 640px; line-height: 1.7; color: #c4b5a0; }
+.gpi-source .eyebrow { color: #d9a441; }
+.source-button { display: inline-block; margin: 12px 0; padding: 12px 18px; border-radius: 8px; background: #d9a441; color: #1a0907; font-weight: 700; }
+.source-note { font-size: 12px; }
+@media (max-width: 600px) { .tabs { display: flex; } .tabs button { padding: 10px 12px; } .gpi-source { padding: 18px; } }
+
+/* Match the dashboard's red casino room, gold trim, and serif wordmark. */
+.brand, h1, h2, .gpi-source h3 { font-family: "Playfair Display", Georgia, serif; }
+.brand { display: inline-flex; align-items: center; gap: 7px; font-size: 26px; }
+.brand-spade { color: var(--gold-2); margin-right: 3px; }
+.brand-gold { background: linear-gradient(180deg, var(--gold-1), var(--gold-2) 60%, var(--gold-3)); background-clip: text; -webkit-background-clip: text; color: transparent; }
+.page-nav { padding-bottom: 22px; border-bottom: 1px solid #d9a44130; }
+.back { padding: 10px 14px; border: 1px solid #d9a44150; border-radius: 8px; }
+.board { background: radial-gradient(ellipse at top left, #3a1013, transparent 70%), #1b090b; box-shadow: 0 22px 65px #0007, inset 0 1px 0 #ffe7a618; }
+.tabs button[aria-pressed="true"], .source-button { background: linear-gradient(180deg, #ffe7a6, #d9a441 65%, #b9822a); box-shadow: 0 3px 12px #0003; }
+.tabs button:hover:not([aria-pressed="true"]), #refresh:hover { background: #ffffff09; }
+tr.is-you { background: #d9a44112; }
+@media (max-width: 600px) { .brand { font-size: 22px; } .back { font-size: 12px; padding: 8px 10px; } }
+
+/* Use the same chip artwork and room palette as the homepage. */
+body { position: relative; isolation: isolate; background: radial-gradient(ellipse 60% 45% at 50% 30%, rgba(70, 14, 14, .55), transparent 70%), linear-gradient(180deg, #160607 0%, #0d0405 45%, #070203 100%); }
+.page { position: relative; z-index: 1; padding-bottom: 180px; }
+.leaderboard-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.scene-glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 0% 85%, #b3121a20, transparent 40%), radial-gradient(ellipse at 100% 85%, #d9a44116, transparent 40%); }
+.leaderboard-scene .chipstacks { position: absolute; width: 14vw; height: 34vh; }
+.leaderboard-scene .chipstacks.left { left: -1vw; bottom: -4vh; }
+.leaderboard-scene .chipstacks.right { right: -1.5vw; bottom: -4vh; }
+.leaderboard-scene .stack {
+  --chip: #b3121a;
+  --chip-dark: #6d0a0f;
+  --chip-edge: rgba(255, 255, 255, .9);
+  position: absolute;
+  width: 5.2vw;
+  border-radius: 2.6vw / .9vw;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 .55vw, rgba(0, 0, 0, .55) .55vw .62vw),
+    repeating-linear-gradient(90deg, var(--chip) 0 .7vw, var(--chip-edge) .7vw 1.05vw, var(--chip) 1.05vw 1.6vw),
+    var(--chip);
+  box-shadow:
+    inset .9vw 0 1vw rgba(0, 0, 0, .55),
+    inset -.6vw 0 .8vw rgba(0, 0, 0, .45),
+    0 1vw 1.5vw rgba(0, 0, 0, .65);
+}
+
+.leaderboard-scene .stack::before {
+  /* top face of the stack */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -.85vw;
+  height: 1.8vw;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse, var(--chip) 0 38%, var(--chip-edge) 39% 43%, var(--chip) 44% 62%, var(--chip-dark) 100%);
+  box-shadow: inset 0 -2px 2px rgba(0, 0, 0, .4);
+}
+
+.leaderboard-scene .stack.black {
+  --chip: #151515;
+  --chip-dark: #050505;
+  --chip-edge: #d4a64c;
+}
+
+.leaderboard-scene .chipstacks.left .tall { left: 0; top: 0; height: 18vh; }
+.leaderboard-scene .chipstacks.left .mid { left: 4.6vw; top: 6vh; height: 13vh; }
+.leaderboard-scene .chipstacks.left .front { left: 1.2vw; top: 17vh; height: 10vh; }
+.leaderboard-scene .chipstacks.left .front2 { left: 6.2vw; top: 22vh; height: 6vh; width: 6vw; border-radius: 3vw / 1vw; }
+.leaderboard-scene .chipstacks.left .front3 { left: 12vw; top: 23vh; height: 4vh; width: 6vw; border-radius: 3vw / 1vw; }
+
+.leaderboard-scene .chipstacks.right .tall { right: 0; top: -4vh; height: 22vh; }
+.leaderboard-scene .chipstacks.right .mid { right: 4.4vw; top: 2vh; height: 15vh; }
+.leaderboard-scene .chipstacks.right .front { right: 9vw; top: 15vh; height: 5vh; width: 6vw; border-radius: 3vw / 1vw; }
+.leaderboard-scene .chipstacks.right .front2 { right: 1vw; top: 20vh; height: 12vh; }
+
+
+@media (max-width: 700px) {
+  .leaderboard-scene .chipstacks { width: 125px; height: 160px; }
+  .leaderboard-scene .chipstacks.left { left: -12px; bottom: -14px; }
+  .leaderboard-scene .chipstacks.right { right: -12px; bottom: -14px; }
+  .leaderboard-scene .stack { width: 44px; border-radius: 22px / 8px; background: repeating-linear-gradient(180deg, transparent 0 5px, #0009 5px 6px), repeating-linear-gradient(90deg, var(--chip) 0 6px, var(--chip-edge) 6px 9px, var(--chip) 9px 14px), var(--chip); }
+  .leaderboard-scene .stack::before { top: -7px; height: 15px; }
+  .leaderboard-scene .chipstacks .tall { height: 120px; top: 15px; }
+  .leaderboard-scene .chipstacks .mid { height: 85px; top: 55px; }
+  .leaderboard-scene .chipstacks.left .mid { left: 38px; }
+  .leaderboard-scene .chipstacks.right .mid { right: 38px; }
+  .leaderboard-scene .chipstacks .front, .leaderboard-scene .chipstacks .front2, .leaderboard-scene .chipstacks .front3 { top: 120px; height: 35px; width: 48px; border-radius: 24px / 8px; }
+  .leaderboard-scene .chipstacks.left .front { left: 12px; }
+  .leaderboard-scene .chipstacks.left .front2 { left: 62px; }
+  .leaderboard-scene .chipstacks.left .front3 { left: 102px; }
+  .leaderboard-scene .chipstacks.right .front { right: 78px; }
+  .leaderboard-scene .chipstacks.right .front2 { right: 4px; }
+}

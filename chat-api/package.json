@@ -1,0 +1,16 @@
+{
+  "name": "pokerpilot-chat-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WebSocket chat relay for PokerPilot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "ws": "^8.22.0"
+  }
+}

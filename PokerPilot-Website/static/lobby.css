@@ -1,0 +1,491 @@
+/* ===================================================================
+   LOBBY - candle-lit casino room, red felt table, three mode cards
+   Every rule is scoped to #lobby.
+   =================================================================== */
+
+#lobby {
+  --gold-1: #ffe7a6;
+  --gold-2: #d9a441;
+  --gold-3: #a8741f;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+  color: #fff;
+  font-family: Montserrat, Inter, system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 30%, rgba(70, 14, 14, .55), transparent 70%),
+    linear-gradient(180deg, #160607 0%, #0d0405 45%, #070203 100%);
+}
+
+/* ------------------------------------------------------------ room */
+
+#lobby .room { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+
+#lobby .glow { position: absolute; }
+
+/* tall red drapes, lit from below */
+#lobby .curtain-left,
+#lobby .curtain-right {
+  top: -5%;
+  height: 62%;
+  width: 26%;
+  background:
+    radial-gradient(ellipse 22% 60% at 20% 45%, rgba(235, 22, 30, .85), rgba(160, 10, 18, .45) 45%, transparent 75%),
+    radial-gradient(ellipse 18% 55% at 62% 40%, rgba(220, 18, 28, .75), rgba(140, 8, 14, .35) 50%, transparent 78%),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .28) 0 3%, transparent 3% 7%);
+  filter: blur(2px);
+  mix-blend-mode: screen;
+}
+
+#lobby .curtain-left { left: 6%; }
+#lobby .curtain-right { right: 6%; transform: scaleX(-1); }
+
+/* brass wall sconces */
+#lobby .lamp-left,
+#lobby .lamp-right {
+  top: 0;
+  width: 18vw;
+  height: 34vh;
+  background:
+    radial-gradient(circle at 50% 18%, #fff3d6 0 1.2vw, rgba(255, 214, 140, .85) 1.8vw, rgba(255, 170, 70, .25) 5vw, transparent 9vw),
+    radial-gradient(ellipse 45% 70% at 50% 30%, rgba(255, 190, 110, .28), transparent 70%);
+}
+
+#lobby .lamp-left { left: -4vw; }
+#lobby .lamp-right { right: -4vw; }
+
+/* out-of-focus lights in the room */
+#lobby .bokeh {
+  inset: 22% 0 40% 0;
+  position: absolute;
+  filter: blur(3px);
+  opacity: .85;
+  background:
+    radial-gradient(circle at 8% 70%, rgba(255, 196, 110, .9) 0 .35vw, transparent .6vw),
+    radial-gradient(circle at 10% 72%, rgba(255, 196, 110, .7) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 12.5% 71%, rgba(255, 196, 110, .7) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 15% 69%, rgba(255, 196, 110, .6) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 24% 52%, rgba(255, 196, 110, .6) 0 .35vw, transparent .6vw),
+    radial-gradient(circle at 26% 54%, rgba(255, 196, 110, .5) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 74% 53%, rgba(255, 196, 110, .6) 0 .35vw, transparent .6vw),
+    radial-gradient(circle at 76% 51%, rgba(255, 196, 110, .5) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 85% 70%, rgba(255, 196, 110, .7) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 88% 72%, rgba(255, 196, 110, .8) 0 .35vw, transparent .6vw),
+    radial-gradient(circle at 90.5% 70%, rgba(255, 196, 110, .7) 0 .3vw, transparent .55vw),
+    radial-gradient(circle at 93% 71%, rgba(255, 196, 110, .6) 0 .3vw, transparent .55vw),
+    radial-gradient(ellipse 30% 22% at 50% 80%, rgba(120, 20, 20, .35), transparent 70%);
+}
+
+/* dark leather chairs behind the table */
+#lobby .chair {
+  position: absolute;
+  top: 34%;
+  width: 13vw;
+  height: 17vh;
+  border-radius: 46% 46% 18% 18% / 60% 60% 20% 20%;
+  background:
+    radial-gradient(ellipse at 50% 20%, rgba(255, 255, 255, .08), transparent 55%),
+    linear-gradient(180deg, #2a0b0d, #120405);
+  box-shadow:
+    inset 0 0 0 .45vw #5e0a10,
+    inset 0 0 0 .6vw rgba(0, 0, 0, .6),
+    0 10px 30px rgba(0, 0, 0, .6);
+  filter: blur(1.5px);
+  opacity: .9;
+}
+
+#lobby .chair-left { left: 16%; }
+#lobby .chair-right { right: 16%; }
+
+/* ----------------------------------------------------------- brand */
+
+#lobby .brand {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  padding-top: clamp(28px, 9vh, 96px);
+}
+
+#lobby .crest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: clamp(-10px, -1vh, -4px);
+}
+
+#lobby .crest-line {
+  position: relative;
+  width: min(15vw, 230px);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-2) 30%, var(--gold-1));
+}
+
+#lobby .crest-line.right { transform: scaleX(-1); }
+
+#lobby .crest-line::before,
+#lobby .crest-line::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  background: var(--gold-1);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+#lobby .crest-line::before { left: 22%; width: 5px; height: 5px; }
+#lobby .crest-line::after { right: -10px; }
+
+#lobby .crest-spade {
+  width: clamp(30px, 3.4vw, 54px);
+  height: auto;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .6)) drop-shadow(0 0 10px rgba(217, 164, 65, .35));
+}
+
+#lobby .wordmark {
+  margin: 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+  font-size: clamp(46px, 7vw, 112px);
+  line-height: 1.05;
+  letter-spacing: -.01em;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .7));
+}
+
+#lobby .wordmark .poker {
+  background: linear-gradient(180deg, #ffffff 0%, #f1f1f1 45%, #b9b9b9 70%, #f4f4f4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+#lobby .wordmark .pilot {
+  background: linear-gradient(180deg, var(--gold-1) 0%, #f3c96b 35%, var(--gold-2) 60%, var(--gold-3) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+#lobby .tagline {
+  margin: clamp(4px, 1vh, 12px) 0 0;
+  color: #eadfca;
+  font-weight: 500;
+  font-size: clamp(11px, 1.15vw, 18px);
+  letter-spacing: .55em;
+  text-indent: .55em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .8);
+}
+
+#lobby .tagline i { font-style: normal; color: var(--gold-2); }
+
+/* ----------------------------------------------------------- table */
+
+#lobby .lobby-table {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 47%;
+  width: 150vw;
+  height: 58%;
+  transform: translateX(-50%);
+}
+
+#lobby .rail {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .12), transparent 30%),
+    linear-gradient(180deg, #1d0d0a, #0b0504 60%, #050202);
+  box-shadow:
+    0 -2px 0 #3a2410,
+    0 -6px 30px rgba(0, 0, 0, .8);
+}
+
+#lobby .rail::after {
+  /* gold piping between leather rail and felt */
+  content: "";
+  position: absolute;
+  inset: 3.2% 1.6%;
+  border-radius: 50%;
+  border: 2px solid #c9953e;
+  box-shadow: 0 0 6px rgba(255, 200, 110, .55), inset 0 0 4px rgba(255, 200, 110, .4);
+}
+
+#lobby .felt {
+  position: absolute;
+  inset: 4% 2%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 34% 40% at 50% 22%, rgba(255, 60, 60, .22), transparent 70%),
+    radial-gradient(ellipse at 50% 30%, #b3141c 0%, #940d14 35%, #6a070c 70%, #3e0306 100%);
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, .6);
+}
+
+#lobby .felt::after {
+  /* felt texture */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: radial-gradient(rgba(255, 255, 255, .09) .6px, transparent .7px);
+  background-size: 4px 4px;
+  opacity: .35;
+}
+
+#lobby .cupholder {
+  position: absolute;
+  bottom: 9%;
+  width: 7vw;
+  height: 2.6vw;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, #0b0503 52%, #6b4a1c 56%, #e7c06b 64%, #8a6224 76%, #1a0d06 82%);
+  box-shadow: 0 0 10px rgba(255, 200, 110, .25);
+}
+
+#lobby .cupholder.left { left: calc(50% - 39vw); }
+#lobby .cupholder.right { right: calc(50% - 39vw); }
+
+/* ---------------------------------------------------- chips & boxes */
+
+#lobby .props { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+#lobby .chipstacks { position: absolute; width: 14vw; height: 34vh; }
+#lobby .chipstacks.left { left: -1vw; top: 52%; }
+#lobby .chipstacks.right { right: -1.5vw; top: 55%; }
+
+#lobby .stack {
+  --chip: #b3121a;
+  --chip-dark: #6d0a0f;
+  --chip-edge: rgba(255, 255, 255, .9);
+  position: absolute;
+  width: 5.2vw;
+  border-radius: 2.6vw / .9vw;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 .55vw, rgba(0, 0, 0, .55) .55vw .62vw),
+    repeating-linear-gradient(90deg, var(--chip) 0 .7vw, var(--chip-edge) .7vw 1.05vw, var(--chip) 1.05vw 1.6vw),
+    var(--chip);
+  box-shadow:
+    inset .9vw 0 1vw rgba(0, 0, 0, .55),
+    inset -.6vw 0 .8vw rgba(0, 0, 0, .45),
+    0 1vw 1.5vw rgba(0, 0, 0, .65);
+}
+
+#lobby .stack::before {
+  /* top face of the stack */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -.85vw;
+  height: 1.8vw;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse, var(--chip) 0 38%, var(--chip-edge) 39% 43%, var(--chip) 44% 62%, var(--chip-dark) 100%);
+  box-shadow: inset 0 -2px 2px rgba(0, 0, 0, .4);
+}
+
+#lobby .stack.black {
+  --chip: #151515;
+  --chip-dark: #050505;
+  --chip-edge: #d4a64c;
+}
+
+#lobby .chipstacks.left .tall { left: 0; top: 0; height: 18vh; }
+#lobby .chipstacks.left .mid { left: 4.6vw; top: 6vh; height: 13vh; }
+#lobby .chipstacks.left .front { left: 1.2vw; top: 17vh; height: 10vh; }
+#lobby .chipstacks.left .front2 { left: 6.2vw; top: 22vh; height: 6vh; width: 6vw; border-radius: 3vw / 1vw; }
+#lobby .chipstacks.left .front3 { left: 12vw; top: 23vh; height: 4vh; width: 6vw; border-radius: 3vw / 1vw; }
+
+#lobby .chipstacks.right .tall { right: 0; top: -4vh; height: 22vh; }
+#lobby .chipstacks.right .mid { right: 4.4vw; top: 2vh; height: 15vh; }
+#lobby .chipstacks.right .front { right: 9vw; top: 15vh; height: 5vh; width: 6vw; border-radius: 3vw / 1vw; }
+#lobby .chipstacks.right .front2 { right: 1vw; top: 20vh; height: 12vh; }
+
+#lobby .cardbox {
+  position: absolute;
+  width: 7.5vw;
+  height: 4.6vw;
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(217, 164, 65, .9) 0 .45vw, transparent .5vw),
+    linear-gradient(160deg, #262626, #0b0b0b 60%);
+  box-shadow:
+    inset 0 0 0 2px #b88a3a,
+    inset 0 0 0 4px #111,
+    0 1.2vw 1.6vw rgba(0, 0, 0, .7);
+}
+
+#lobby .cardbox.left { left: 10.5vw; top: 60%; transform: perspective(600px) rotateX(48deg) rotateZ(4deg); }
+#lobby .cardbox.right { right: 9vw; top: 66%; transform: perspective(600px) rotateX(48deg) rotateZ(-6deg); }
+
+/* ------------------------------------------------------ mode cards */
+
+#lobby .modes {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(18px, 6vw, 110px);
+  margin-top: clamp(18px, 5vh, 52px);
+  padding: 0 16px;
+}
+
+#lobby .mode {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: inherit;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#lobby .play-card {
+  --tilt: 0deg;
+  position: relative;
+  display: block;
+  width: clamp(84px, 9.4vw, 150px);
+  aspect-ratio: 5 / 7;
+  border-radius: clamp(6px, .7vw, 11px);
+  color: #121212;
+  background:
+    radial-gradient(ellipse at 30% 20%, #ffffff, #f6f1e6 60%, #e9e1cf);
+  box-shadow:
+    inset 0 0 0 1px rgba(160, 120, 40, .55),
+    0 0 0 1.5px #caa04f,
+    0 2px 3px rgba(0, 0, 0, .35),
+    0 22px 28px -10px rgba(0, 0, 0, .75);
+  transform: rotate(var(--tilt));
+  transition: transform .25s ease, box-shadow .25s ease;
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+#lobby .play-card.red { color: #c8141c; }
+#lobby .play-card.tilt-left { --tilt: -7deg; }
+#lobby .play-card.tilt-right { --tilt: 8deg; }
+
+#lobby .idx {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: .9;
+  font-weight: 700;
+  font-size: clamp(16px, 1.9vw, 30px);
+}
+
+#lobby .idx b { font-size: .8em; font-weight: 400; margin-top: 2px; }
+#lobby .idx.top { left: 9%; top: 6%; }
+#lobby .idx.bottom { right: 9%; bottom: 6%; transform: rotate(180deg); }
+
+#lobby .pip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(32px, 3.9vw, 62px);
+  line-height: 1;
+}
+
+#lobby .mode:hover .play-card,
+#lobby .mode:focus-visible .play-card {
+  transform: translateY(-12px) rotate(var(--tilt));
+  box-shadow:
+    inset 0 0 0 1px rgba(160, 120, 40, .55),
+    0 0 0 2px #f0c66a,
+    0 0 26px rgba(255, 200, 100, .55),
+    0 34px 34px -12px rgba(0, 0, 0, .8);
+}
+
+#lobby .mode:focus-visible { outline: none; }
+
+#lobby .mode:disabled { cursor: progress; }
+
+#lobby .mode-name {
+  margin-top: clamp(14px, 3vh, 30px);
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(15px, 1.65vw, 26px);
+  letter-spacing: .04em;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .9);
+}
+
+#lobby .mode-name.gold {
+  background: linear-gradient(180deg, var(--gold-1), var(--gold-2) 60%, var(--gold-3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .9));
+}
+
+#lobby .mode-rule {
+  position: relative;
+  display: block;
+  width: clamp(90px, 10vw, 160px);
+  height: 1px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, transparent, #d9a441 25%, #d9a441 75%, transparent);
+}
+
+#lobby .mode-rule::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  background: #e8bb5c;
+  transform: translate(-50%, -50%) rotate(45deg);
+  box-shadow: 0 0 6px rgba(255, 200, 100, .7);
+}
+
+#lobby .lobby-error {
+  position: relative;
+  z-index: 7;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 24px auto 0;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #ffd9d4;
+  background: rgba(0, 0, 0, .7);
+  border: 1px solid rgba(255, 110, 100, .55);
+  font-size: 14px;
+}
+
+/* ------------------------------------------------------ responsive */
+
+@media (max-width: 760px) {
+  #lobby .curtain-left, #lobby .curtain-right { width: 40%; height: 48%; }
+  #lobby .chair { width: 26vw; height: 12vh; top: 33%; }
+  #lobby .chair-left { left: 2%; }
+  #lobby .chair-right { right: 2%; }
+  #lobby .lobby-table { top: 50%; width: 230vw; height: 52%; }
+  #lobby .cupholder { display: none; }
+  #lobby .cardbox { display: none; }
+  #lobby .chipstacks { transform: scale(1.5); top: auto; bottom: 1%; }
+  #lobby .chipstacks.left { left: -12vw; transform-origin: bottom left; }
+  #lobby .chipstacks.right { right: -12vw; transform-origin: bottom right; }
+  #lobby .tagline { letter-spacing: .38em; text-indent: .38em; }
+  #lobby .crest-line { width: 22vw; }
+  #lobby .modes { gap: 5vw; margin-top: 6vh; }
+  #lobby .play-card { width: 25vw; max-width: 120px; }
+  #lobby .idx { font-size: clamp(14px, 4.4vw, 24px); }
+  #lobby .pip { font-size: clamp(30px, 10vw, 54px); }
+  #lobby .mode-name { font-size: clamp(14px, 4.2vw, 20px); }
+  #lobby .mode-rule { width: 22vw; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #lobby .play-card { transition: none; }
+}

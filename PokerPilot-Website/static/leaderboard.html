@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>Leaderboards · Poker Pilot</title>
+  <link rel="stylesheet" href="/static/leaderboard-page.css?v=homepage-chips">
+  <script src="/static/leaderboard-page.js?v=homepage-chips" defer></script>
+</head>
+<body>
+  <div class="leaderboard-scene" aria-hidden="true">
+    <div class="scene-glow"></div>
+    <div class="chipstacks left"><div class="stack red tall"></div><div class="stack red mid"></div><div class="stack red front"></div><div class="stack black front2"></div><div class="stack black front3"></div></div>
+    <div class="chipstacks right"><div class="stack red tall"></div><div class="stack red mid"></div><div class="stack black front"></div><div class="stack red front2"></div></div>
+  </div>
+  <main class="page">
+    <header class="page-nav"><a class="brand" href="/"><span class="brand-spade" aria-hidden="true">♠</span> <span>Poker</span> <span class="brand-gold">Pilot</span></a><a class="back" href="/">← Game dashboard</a></header>
+    <section class="intro"><p class="eyebrow">THE STANDINGS</p><h1>Every round counts.</h1><p>Explore professional poker rankings, Poker Pilot players, and your current table.</p></section>
+    <section class="board" aria-labelledby="board-title">
+      <div class="board-header"><h2 id="board-title">Global Poker Index</h2><button id="refresh" type="button">Refresh</button></div>
+      <div class="tabs" role="group" aria-label="Choose rankings"><button id="global-tab" aria-pressed="true" type="button">Global GPI</button><button id="pilot-tab" aria-pressed="false" type="button">Poker Pilot</button><button id="game-tab" aria-pressed="false" type="button">This game</button></div>
+      <p id="description">Professional poker rankings from The Hendon Mob’s Global Poker Index.</p>
+      <section id="gpi-source" class="gpi-source" aria-label="Official GPI rankings">
+        <p class="eyebrow">THE HENDON MOB · GPI</p>
+        <h3>World poker rankings</h3>
+        <p>Explore the professional player rankings on The Hendon Mob. GPI points are separate from winnings earned in Poker Pilot.</p>
+        <a class="source-button" href="https://pokerdb.thehendonmob.com/ranking/gpi/" target="_blank" rel="noopener noreferrer">View official GPI rankings ↗</a>
+        <p class="source-note">Rankings open on the official website in a new tab. A live list is not imported here.</p>
+      </section>
+      <p id="message" role="status"></p>
+      <div class="table-scroll"><table id="rankings" hidden><caption class="sr-only">Poker Pilot player rankings</caption><thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th id="winnings-label" scope="col">Total net winnings</th><th scope="col">Rounds participated</th></tr></thead><tbody id="players"></tbody></table></div>
+      <footer><span id="updated">Refreshes every 10 seconds</span><a href="/">Join a game →</a></footer>
+    </section>
+  </main>
+</body>
+</html>
