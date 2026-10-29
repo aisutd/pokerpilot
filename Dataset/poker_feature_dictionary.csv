@@ -1,0 +1,82 @@
+column,group,use_as_model_input,description
+decision_id,ID / reference,No,Unique id: game + decision number
+game_id,ID / reference,No,Game (hand) id
+decision_idx,ID / reference,No,Order of this decision within the game
+date,ID / reference,No,Game date
+stake_level,Decision context,Yes,Stake level
+big_blind_usd,Decision context,Yes,Big blind in USD
+street,Decision context,Yes,Betting round
+street_idx,Decision context,Yes,0=Preflop 1=Flop 2=Turn 3=River
+player_id,ID / reference,No,Acting player
+player_name,ID / reference,No,Acting player name
+seat,Decision context,Yes,Seat number (1 = small blind)
+position,Decision context,Yes,Table position
+num_players,Decision context,Yes,Players dealt in
+players_in_hand,Decision context,Yes,Players not yet folded
+players_yet_to_act,Decision context,Yes,Opponents still to act after this player on this street
+in_position,Decision context,Yes,1 if player acts last after the flop among remaining players
+pot_bb,Decision context,Yes,Pot before this action (bb)
+to_call_bb,Decision context,Yes,Chips needed to call (bb)
+pot_odds,Decision context,Yes,to_call / (pot + to_call)
+facing_bet,Decision context,Yes,1 if there is a bet to call
+facing_bet_pot_frac,Decision context,Yes,Size of the bet faced as a fraction of the pot
+stack_bb,Decision context,Yes,Player stack before acting (bb)
+effective_stack_bb,Decision context,Yes,"min(own stack, biggest opponent stack still in hand)"
+spr,Decision context,Yes,Stack-to-pot ratio (effective stack / pot)
+raises_this_street,Decision context,Yes,Bets + raises already made this street
+callers_this_street,Decision context,Yes,Calls since the last bet/raise
+is_street_aggressor,Decision context,Yes,1 if this player made the last bet/raise this street
+was_prev_street_aggressor,Decision context,Yes,1 if this player was the last aggressor on an earlier street
+own_prev_action_street,Decision context,Yes,This player's previous action on this street
+last_opp_action,Decision context,Yes,Most recent action by anyone this street
+hole_cards,ID / reference,No,Player hole cards
+board,ID / reference,No,Community cards visible at decision time
+card_high_rank,Hand strength,Yes,"Higher hole-card rank (2-14, A=14)"
+card_low_rank,Hand strength,Yes,Lower hole-card rank
+is_pocket_pair,Hand strength,Yes,1 if hole cards pair
+is_suited,Hand strength,Yes,1 if hole cards share a suit
+rank_gap,Hand strength,Yes,Rank difference between hole cards
+chen_score,Hand strength,Yes,Chen preflop hand score
+preflop_percentile,Hand strength,Yes,"Preflop strength percentile among all 1,326 starting hands"
+made_hand,Hand strength,Yes,Current best hand category
+made_hand_rank,Hand strength,Yes,0=High card … 8=Straight flush
+made_hand_strength,Hand strength,Yes,"Absolute strength of current 5-card hand, 0-1 (postflop only)"
+pair_type,Hand strength,Yes,Overpair / top / middle / bottom pair etc.
+flush_draw,Hand strength,Yes,1 if 4 to a flush using a hole card
+straight_draw,Hand strength,Yes,none / gutshot / open-ended
+draw_outs,Hand strength,Yes,Approximate outs to improve
+board_paired,Board texture,Yes,1 if board has a pair
+board_suit_texture,Board texture,Yes,rainbow / two-tone / monotone
+board_connectedness,Board texture,Yes,Max board cards inside any 5-rank window
+board_high_rank,Board texture,Yes,Highest board card rank
+equity_vs_random,Hand strength,Yes,Monte Carlo win probability vs current number of opponents holding random hands
+player_hands_seen,Player & opponent tendencies,Yes,Acting player: games played before this one (earlier games only – no leakage)
+player_vpip,Player & opponent tendencies,Yes,Acting player: share of earlier games played voluntarily (earlier games only – no leakage)
+player_pfr,Player & opponent tendencies,Yes,Acting player: share of earlier games raised preflop (earlier games only – no leakage)
+player_aggression_factor,Player & opponent tendencies,Yes,Acting player: (postflop bets+raises)/calls in earlier games (earlier games only – no leakage)
+player_fold_to_bet,Player & opponent tendencies,Yes,Acting player: share of postflop bets faced that were folded (earlier games only – no leakage)
+player_wtsd,Player & opponent tendencies,Yes,Acting player: share of flops seen that reached showdown (earlier games only – no leakage)
+player_won_at_showdown,Player & opponent tendencies,Yes,Acting player: share of showdowns won (earlier games only – no leakage)
+player_bb_per_100,Player & opponent tendencies,Yes,"Acting player: historical win rate, bb per 100 games (earlier games only – no leakage)"
+player_net_bb_last20,Player & opponent tendencies,Yes,Acting player: net bb over last 20 games (form / tilt) (earlier games only – no leakage)
+opponent_id,ID / reference,No,"Main opponent: last aggressor, else biggest investor still in hand"
+opp_hands_seen,Player & opponent tendencies,Yes,Main opponent: games played before this one (earlier games only – no leakage)
+opp_vpip,Player & opponent tendencies,Yes,Main opponent: share of earlier games played voluntarily (earlier games only – no leakage)
+opp_pfr,Player & opponent tendencies,Yes,Main opponent: share of earlier games raised preflop (earlier games only – no leakage)
+opp_aggression_factor,Player & opponent tendencies,Yes,Main opponent: (postflop bets+raises)/calls in earlier games (earlier games only – no leakage)
+opp_fold_to_bet,Player & opponent tendencies,Yes,Main opponent: share of postflop bets faced that were folded (earlier games only – no leakage)
+opp_wtsd,Player & opponent tendencies,Yes,Main opponent: share of flops seen that reached showdown (earlier games only – no leakage)
+opp_won_at_showdown,Player & opponent tendencies,Yes,Main opponent: share of showdowns won (earlier games only – no leakage)
+opp_bb_per_100,Player & opponent tendencies,Yes,"Main opponent: historical win rate, bb per 100 games (earlier games only – no leakage)"
+opp_net_bb_last20,Player & opponent tendencies,Yes,Main opponent: net bb over last 20 games (form / tilt) (earlier games only – no leakage)
+opp_stack_bb,Player & opponent tendencies,Yes,Main opponent stack (bb)
+table_avg_vpip,Player & opponent tendencies,Yes,Average historical VPIP of opponents still in hand
+target_action,Target,Label,TARGET – fold / check / call / bet / raise / all-in
+target_action_amount_to_bb,Target,Label,TARGET – street total after a call/bet/raise (bb)
+target_chips_added_bb,Target,Label,TARGET – chips put in by this action
+target_bet_size_pot_frac,Target,Label,TARGET – bet/raise chips as a fraction of pot
+outcome_hand_net_bb,Outcome (LEAKS – do not use as input),No,Actual net result of the hand for this player (bb)
+outcome_ev_net_bb,Outcome (LEAKS – do not use as input),No,All-in adjusted EV net (bb): luck removed when all-in before the river
+outcome_won_hand,Outcome (LEAKS – do not use as input),No,1 if player profited from the hand
+outcome_final_street,Outcome (LEAKS – do not use as input),No,Where this player's hand ended
+split,ID / reference,No,Chronological train / val / test split by game

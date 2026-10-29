@@ -170,14 +170,16 @@ button:focus-visible, input:focus-visible {
 
 /* ------------------------------------------------------------- cards */
 
+/* Faces are the team's deck (Assets/Cards/deck.svg); backs are the gold
+   ones from the table mock-up. */
 .card {
   position: relative;
   flex: none;
   width: var(--card-w);
   height: calc(var(--card-w) * 1.4);
   border-radius: calc(var(--card-w) * .07);
-  background: #fbf7ee;
-  box-shadow: inset 0 0 0 calc(var(--card-w) * .025) #d6cbb6, 0 calc(var(--card-w) * .05) calc(var(--card-w) * .12) rgba(0, 0, 0, .4);
+  background: #fff;
+  box-shadow: 0 calc(var(--card-w) * .05) calc(var(--card-w) * .12) rgba(0, 0, 0, .4);
   color: var(--card-black);
   font-family: var(--pixel);
   line-height: 1;
@@ -186,52 +188,21 @@ button:focus-visible, input:focus-visible {
 }
 
 .card.red { color: var(--card-red); }
+.card-face-svg { display: block; width: 100%; height: 100%; overflow: visible; }
 
+/* the plain index on small cards beside players, used on phones */
 .card .corner {
   position: absolute;
-  left: 6%;
-  top: 4%;
-  display: flex;
+  left: 9%;
+  top: 6%;
+  display: none;
   flex-direction: column;
   align-items: center;
-  font-size: calc(var(--card-w) * .2);
-}
-
-.card .corner.br { left: auto; top: auto; right: 6%; bottom: 4%; transform: rotate(180deg); }
-.card i { font-style: normal; font-family: "Segoe UI Symbol", "Apple Symbols", system-ui, sans-serif; }
-.card .corner i { font-size: .7em; margin-top: .06em; }
-
-/* pips on number cards and aces, in two columns clear of the corners */
-.card .pips { position: absolute; inset: 14% 31%; }
-
-.card .pips i {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  font-size: calc(var(--card-w) * .17);
-}
-
-.card .pips i.flip { transform: translate(-50%, -50%) rotate(180deg); }
-.card .pips.ace i { font-size: calc(var(--card-w) * .48); }
-
-/* court cards: a framed letter */
-.card .court {
-  position: absolute;
-  inset: 17% 18%;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: .05em;
-  border: calc(var(--card-w) * .025) solid currentColor;
-  border-radius: calc(var(--card-w) * .04);
-  background: linear-gradient(180deg, #fbe3a2, #eec66a);
   font-size: calc(var(--card-w) * .36);
 }
 
-.card .court i { font-size: .6em; }
-
-/* small cards beside players: just the corner, bigger */
-.card.mini .corner { left: 9%; top: 6%; font-size: calc(var(--card-w) * .36); }
-.card.mini .corner.br, .card.mini .pips, .card.mini .court { display: none; }
+.card i { font-style: normal; font-family: "Segoe UI Symbol", "Apple Symbols", system-ui, sans-serif; }
+.card .corner i { font-size: .7em; margin-top: .06em; }
 
 /* gold backs, as in the mock-up */
 .card.back {
@@ -1013,6 +984,8 @@ button:focus-visible, input:focus-visible {
   }
 
   .seat-cards { gap: 3px; --card-w: 20px; }
+  .card.mini .card-face-svg { display: none; }
+  .card.mini .corner { display: flex; }
   .seat-cards.up { --card-w: 28px; }
   .seat[data-pos="top"] .seat-cards { left: 100%; bottom: auto; top: 50%; transform: translate(8px, -50%); }
 

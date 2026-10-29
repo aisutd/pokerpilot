@@ -69,9 +69,15 @@ function prettyCard(code) {
 const capitalize = (text) => text[0].toUpperCase() + text.slice(1);
 
 async function api(path, body) {
+  const headers = {};
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    const csrf = document.cookie.split('; ').find((item) => item.startsWith('pokerpilot_csrf='));
+    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf.slice('pokerpilot_csrf='.length));
+  }
   const options = body === undefined
     ? { method: 'GET' }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    : { method: 'POST', headers, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -94,7 +100,12 @@ async function api(path, body) {
     throw new Error('The server sent an unexpected response.');
   }
 
-  if (!response.ok) throw new Error((data && data.error) || 'Something went wrong.');
+  if (!response.ok) {
+    if (response.status === 401) {
+      location.assign(`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+    }
+    throw new Error((data && (data.detail || data.error)) || 'Something went wrong.');
+  }
   return data;
 }
 
@@ -550,25 +561,12 @@ function renderStepper(el, room, you, canRemove) {
 
 // --------------------------------------------------------------- cards
 
-// Where the pips go on number cards, as [x, y] percentages of the pip area.
-// Pips below the middle are drawn upside down, as on real cards.
-const PIPS = {
-  A: [[50, 50]],
-  2: [[50, 0], [50, 100]],
-  3: [[50, 0], [50, 50], [50, 100]],
-  4: [[0, 0], [100, 0], [0, 100], [100, 100]],
-  5: [[0, 0], [100, 0], [50, 50], [0, 100], [100, 100]],
-  6: [[0, 0], [100, 0], [0, 50], [100, 50], [0, 100], [100, 100]],
-  7: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [0, 100], [100, 100]],
-  8: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [50, 75], [0, 100], [100, 100]],
-  9: [[0, 0], [100, 0], [0, 33], [100, 33], [50, 50], [0, 67], [100, 67], [0, 100], [100, 100]],
-  T: [[0, 0], [100, 0], [50, 17], [0, 33], [100, 33], [0, 67], [100, 67], [50, 83], [0, 100], [100, 100]],
-};
-
 function suitGlyph(suit) {
   return Object.assign(document.createElement('i'), { textContent: SUITS[suit] });
 }
 
+// Card faces come from the team's deck (Assets/Cards/deck.svg, served at
+// /cards/deck.svg); backs are the gold ones from the table mock-up (style.css).
 function cardElement(code, mini) {
   const el = document.createElement('div');
   el.className = mini ? 'card mini' : 'card';
@@ -579,48 +577,40 @@ function cardElement(code, mini) {
     return el;
   }
 
-  if (code === 'slot') {
+  if (code === 'slot' || !/^[2-9TJQKA][shdc]$/.test(code)) {
     el.classList.add('slot');
     return el;
   }
 
-  const [rank, suit] = code;
-  const label = rank === 'T' ? '10' : rank;
-  if (RED_SUITS.has(suit)) el.classList.add('red');
+  if (RED_SUITS.has(code[1])) el.classList.add('red');
   el.setAttribute('aria-label', prettyCard(code));
+  appendCardArt(el, `card-${code}`);
 
-  const corner = (where) => {
-    const span = document.createElement('span');
-    span.className = `corner ${where}`;
-    span.setAttribute('aria-hidden', 'true');
-    span.append(label, suitGlyph(suit));
-    return span;
-  };
-  el.append(corner('tl'));
-  if (mini) return el;
-
-  if (PIPS[rank]) {
-    const pips = document.createElement('span');
-    pips.className = rank === 'A' ? 'pips ace' : 'pips';
-    pips.setAttribute('aria-hidden', 'true');
-    for (const [x, y] of PIPS[rank]) {
-      const pip = suitGlyph(suit);
-      pip.style.left = `${x}%`;
-      pip.style.top = `${y}%`;
-      if (y > 50) pip.className = 'flip';
-      pips.appendChild(pip);
-    }
-    el.appendChild(pips);
-  } else {
-    const court = document.createElement('span');
-    court.className = 'court';
-    court.setAttribute('aria-hidden', 'true');
-    court.append(label, suitGlyph(suit));
-    el.appendChild(court);
+  // Cards beside players on phones are too small for the deck's corner, so
+  // they also carry a plain index; style.css shows one or the other.
+  if (mini) {
+    const corner = document.createElement('span');
+    corner.className = 'corner';
+    corner.setAttribute('aria-hidden', 'true');
+    corner.append(code[0] === 'T' ? '10' : code[0], suitGlyph(code[1]));
+    el.appendChild(corner);
   }
-
-  el.append(corner('br'));
   return el;
+}
+
+function appendCardArt(container, symbol) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'card-face-svg');
+  svg.setAttribute('viewBox', '0 0 250 350');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  const href = `/cards/deck.svg#${symbol}`;
+  use.setAttribute('href', href);
+  use.setAttribute('width', '250');
+  use.setAttribute('height', '350');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
+  svg.append(use);
+  container.append(svg);
 }
 
 function renderCards(container, codes, mini = false) {
@@ -1088,6 +1078,17 @@ $('rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('modal-rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('restart').addEventListener('click', () => sendMessage({ type: 'restart' }));
 $('to-lobby').addEventListener('click', leaveRoom);
+$('logout').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', {});
+    saveSession(null);
+    disconnect();
+    disconnectChat();
+    location.assign('/auth');
+  } catch (error) {
+    showError(error.message);
+  }
+});
 
 $('raise-slider').addEventListener('input', (e) => {
   const amount = Number(e.target.value);
@@ -1188,16 +1189,28 @@ document.addEventListener('keydown', (e) => {
 applySettings();
 narrow.addEventListener('change', () => { if (view) render(view); });
 
-try { $('player-name').value = localStorage.getItem(NAME_KEY) || ''; } catch { /* ignore */ }
 const invited = new URLSearchParams(location.search).get('room');
 if (invited) $('join-code').value = invited.toUpperCase().slice(0, 5);
 
-api('/api/info').then((info) => { lanUrl = info.lan_url; publicUrl = info.public_url; }).catch(() => {});
-
-// Rejoin the room after a reload (sessionStorage is per tab, so two tabs
-// can sit at the same table as different players).
-session = loadSession();
-if (session) {
-  showScreen('loading');
-  connect();
+async function initializeOnlineApp() {
+  try {
+    const { user } = await api('/api/auth/me');
+    $('account-name').textContent = user.username;
+    try { $('player-name').value = localStorage.getItem(NAME_KEY) || user.username; }
+    catch { $('player-name').value = user.username; }
+    const info = await api('/api/info');
+    lanUrl = info.lan_url;
+    publicUrl = info.public_url;
+    // The tab-local room token cannot authenticate a user by itself; a
+    // valid account session is also checked on each WebSocket message.
+    session = loadSession();
+    if (session) {
+      showScreen('loading');
+      connect();
+    }
+  } catch (error) {
+    showError(error.message);
+  }
 }
+
+initializeOnlineApp();
