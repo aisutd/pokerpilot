@@ -558,3 +558,5 @@
 @media (prefers-reduced-motion: reduce) {
   #lobby .play-card { transition: none; }
 }
+#lobby .lobby-account { position: relative; z-index: 4; display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 10px; color: #e9ddc0; font-size: 13px; }
+#lobby .lobby-account button { padding: 7px 12px; border: 1px solid rgba(217, 164, 65, .55); border-radius: 6px; color: #f5e4b8; background: rgba(17, 43, 33, .92); cursor: pointer; font: inherit; }

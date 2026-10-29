@@ -1,8 +1,11 @@
 pokerkit==0.7.6
 Flask==3.1.3
-numpy>=1.26,<3
+python-dotenv>=1.0,<2
+psycopg[binary]>=3.2,<4
+numpy>=1.26,<2
+scipy>=1.11,<1.14
 torch>=2.2
 google-genai>=1.0
 # XGBoost opponents (../pokerpilot_model)
 xgboost>=2.0
-pandas>=2.0
+pandas>=2.0,<3

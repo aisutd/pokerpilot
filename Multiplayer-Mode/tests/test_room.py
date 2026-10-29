@@ -58,6 +58,12 @@ def random_move(room: Room, token: str, rng: random.Random) -> None:
 
 
 class RoomTest(unittest.TestCase):
+    def test_room_member_is_bound_to_authenticated_account(self) -> None:
+        room = Room('AUTH', timers=False)
+        token = room.join('Ann', account_id='user-123')
+        self.assertEqual(room.players[token].account_id, 'user-123')
+        self.assertNotEqual(token, 'user-123')
+
     def check_views(self, room: Room, sockets: dict[str, FakeSocket]) -> None:
         for token, ws in sockets.items():
             if token not in room.players:

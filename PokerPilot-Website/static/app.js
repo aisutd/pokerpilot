@@ -42,9 +42,15 @@ function prettyCard(code) {
 }
 
 async function api(path, body) {
+  const headers = {};
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    const csrf = document.cookie.split('; ').find((item) => item.startsWith('pokerpilot_csrf='));
+    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf.slice('pokerpilot_csrf='.length));
+  }
   const options = body === undefined
     ? { method: 'GET' }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    : { method: 'POST', headers, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -67,7 +73,12 @@ async function api(path, body) {
     throw new Error('The server sent an unexpected response.');
   }
 
-  if (!response.ok) throw new Error((data && data.error) || 'Something went wrong.');
+  if (!response.ok) {
+    if (response.status === 401) {
+      location.assign(`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+    }
+    throw new Error((data && (data.detail || data.error)) || 'Something went wrong.');
+  }
   return data;
 }
 
@@ -169,6 +180,7 @@ function cardElement(code) {
   if (!code) {
     el.classList.add('back');
     el.setAttribute('aria-label', 'Face-down card');
+    appendCardArt(el, 'card-back');
     return el;
   }
 
@@ -177,17 +189,29 @@ function cardElement(code) {
     return el;
   }
 
+  if (!/^[2-9TJQKA][shdc]$/.test(code)) {
+    el.classList.add('slot');
+    return el;
+  }
   if (RED_SUITS.has(code[1])) el.classList.add('red');
   el.setAttribute('aria-label', prettyCard(code));
-
-  const rank = document.createElement('span');
-  rank.className = 'rank';
-  rank.textContent = code[0] === 'T' ? '10' : code[0];
-  const suit = document.createElement('span');
-  suit.className = 'suit';
-  suit.textContent = SUITS[code[1]];
-  el.append(rank, suit);
+  appendCardArt(el, `card-${code}`);
   return el;
+}
+
+function appendCardArt(container, symbol) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'card-face-svg');
+  svg.setAttribute('viewBox', '0 0 250 350');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  const href = `/cards/deck.svg#${symbol}`;
+  use.setAttribute('href', href);
+  use.setAttribute('width', '250');
+  use.setAttribute('height', '350');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
+  svg.append(use);
+  container.append(svg);
 }
 
 function renderCards(container, codes) {
@@ -728,6 +752,14 @@ function toLobby() {
 }
 
 $('to-lobby').addEventListener('click', toLobby);
+$('logout').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', {});
+    location.assign('/auth');
+  } catch (error) {
+    showError(error.message);
+  }
+});
 $('quit').addEventListener('click', () => {
   if (view && !view.hand_over && !view.game_over
       && !confirm('Leave this table? Starting a new game will forfeit it.')) return;
@@ -746,15 +778,20 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'n' && view && view.hand_over && !view.game_over && !busy) send('/api/next', {});
 });
 
-loadModels();
-
-// Resume a game in progress after a page reload.
-api('/api/state')
-  .then((data) => {
+async function initializeApp() {
+  try {
+    const { user } = await api('/api/auth/me');
+    $('account-name').textContent = user.username;
+    await loadModels();
+    const data = await api('/api/state');
     if (data && data.view) {
       showScreen('game');
       render(data.view);
       connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     }
-  })
-  .catch(() => { /* no game yet: stay in the lobby */ });
+  } catch (error) {
+    showError(error.message);
+  }
+}
+
+initializeApp();

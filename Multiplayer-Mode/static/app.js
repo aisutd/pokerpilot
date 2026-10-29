@@ -55,9 +55,15 @@ function prettyCard(code) {
 const capitalize = (text) => text[0].toUpperCase() + text.slice(1);
 
 async function api(path, body) {
+  const headers = {};
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    const csrf = document.cookie.split('; ').find((item) => item.startsWith('pokerpilot_csrf='));
+    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf.slice('pokerpilot_csrf='.length));
+  }
   const options = body === undefined
     ? { method: 'GET' }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    : { method: 'POST', headers, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -80,7 +86,12 @@ async function api(path, body) {
     throw new Error('The server sent an unexpected response.');
   }
 
-  if (!response.ok) throw new Error((data && data.error) || 'Something went wrong.');
+  if (!response.ok) {
+    if (response.status === 401) {
+      location.assign(`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+    }
+    throw new Error((data && (data.detail || data.error)) || 'Something went wrong.');
+  }
   return data;
 }
 
@@ -424,6 +435,7 @@ function cardElement(code) {
   if (!code) {
     el.classList.add('back');
     el.setAttribute('aria-label', 'Face-down card');
+    appendCardArt(el, 'card-back');
     return el;
   }
 
@@ -432,17 +444,29 @@ function cardElement(code) {
     return el;
   }
 
+  if (!/^[2-9TJQKA][shdc]$/.test(code)) {
+    el.classList.add('slot');
+    return el;
+  }
   if (RED_SUITS.has(code[1])) el.classList.add('red');
   el.setAttribute('aria-label', prettyCard(code));
-
-  const rank = document.createElement('span');
-  rank.className = 'rank';
-  rank.textContent = code[0] === 'T' ? '10' : code[0];
-  const suit = document.createElement('span');
-  suit.className = 'suit';
-  suit.textContent = SUITS[code[1]];
-  el.append(rank, suit);
+  appendCardArt(el, `card-${code}`);
   return el;
+}
+
+function appendCardArt(container, symbol) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'card-face-svg');
+  svg.setAttribute('viewBox', '0 0 250 350');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  const href = `/cards/deck.svg#${symbol}`;
+  use.setAttribute('href', href);
+  use.setAttribute('width', '250');
+  use.setAttribute('height', '350');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
+  svg.append(use);
+  container.append(svg);
 }
 
 function renderCards(container, codes) {
@@ -864,6 +888,17 @@ $('rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('modal-rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('restart').addEventListener('click', () => sendMessage({ type: 'restart' }));
 $('to-lobby').addEventListener('click', leaveRoom);
+$('logout').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', {});
+    saveSession(null);
+    disconnect();
+    disconnectChat();
+    location.assign('/auth');
+  } catch (error) {
+    showError(error.message);
+  }
+});
 
 $('raise-caret').addEventListener('click', () => {
   const caret = $('raise-caret');
@@ -927,16 +962,27 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- start
 
-try { $('player-name').value = localStorage.getItem(NAME_KEY) || ''; } catch { /* ignore */ }
 const invited = new URLSearchParams(location.search).get('room');
 if (invited) $('join-code').value = invited.toUpperCase().slice(0, 5);
 
-api('/api/info').then((info) => { lanUrl = info.lan_url; }).catch(() => {});
-
-// Rejoin the room after a reload (sessionStorage is per tab, so two tabs
-// can sit at the same table as different players).
-session = loadSession();
-if (session) {
-  showScreen('loading');
-  connect();
+async function initializeOnlineApp() {
+  try {
+    const { user } = await api('/api/auth/me');
+    $('account-name').textContent = user.username;
+    try { $('player-name').value = localStorage.getItem(NAME_KEY) || user.username; }
+    catch { $('player-name').value = user.username; }
+    const info = await api('/api/info');
+    lanUrl = info.lan_url;
+    // The tab-local room token cannot authenticate a user by itself; a
+    // valid account session is also checked on each WebSocket message.
+    session = loadSession();
+    if (session) {
+      showScreen('loading');
+      connect();
+    }
+  } catch (error) {
+    showError(error.message);
+  }
 }
+
+initializeOnlineApp();

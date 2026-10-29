@@ -1,15 +1,23 @@
 import time
 import unittest
+from unittest.mock import patch
 
 from app import app, match_chat_rooms, matches
 
 
 class ChatRoomTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.auth_patch = patch(
+            'backend.auth_routes.auth.session_user',
+            return_value={'id': 1, 'username': 'test', 'email': 'test@example.test'},
+        )
+        self.auth_patch.start()
         self.first_match = f'first-{id(self)}'
         self.second_match = f'second-{id(self)}'
         self.first_client = app.test_client()
         self.second_client = app.test_client()
+        self.first_client.set_cookie('pokerpilot_session', 'test-session')
+        self.second_client.set_cookie('pokerpilot_session', 'test-session')
         with self.first_client.session_transaction() as flask_session:
             flask_session['match_id'] = self.first_match
         with self.second_client.session_transaction() as flask_session:
@@ -23,6 +31,7 @@ class ChatRoomTest(unittest.TestCase):
             matches.pop(self.second_match, None)
             match_chat_rooms.pop(self.first_match, None)
             match_chat_rooms.pop(self.second_match, None)
+        self.auth_patch.stop()
 
     def test_each_game_gets_its_own_stable_chat_room(self) -> None:
         first_room = self.first_client.get('/api/chat-room').get_json()['room']
@@ -35,6 +44,7 @@ class ChatRoomTest(unittest.TestCase):
 
     def test_chat_room_requires_an_active_game(self) -> None:
         client = app.test_client()
+        client.set_cookie('pokerpilot_session', 'test-session')
         response = client.get('/api/chat-room')
 
         self.assertEqual(response.status_code, 400)
