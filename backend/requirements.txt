@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 openai
 python-dotenv
+psycopg[binary]>=3.2,<4
 numpy
 pandas
 xgboost

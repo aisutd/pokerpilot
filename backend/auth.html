@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PokerPilot · Account</title>
+  <link rel="stylesheet" href="/auth.css">
+</head>
+<body>
+  <main class="auth-card">
+    <div class="auth-mark" aria-hidden="true">♠</div>
+    <h1>PokerPilot</h1>
+    <p class="auth-subtitle">Sign in to take your seat.</p>
+    <form id="login-form">
+      <label for="login-identifier">Username or email</label>
+      <input id="login-identifier" autocomplete="username" required maxlength="254">
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required maxlength="128">
+      <button class="auth-submit" type="submit">Log in</button>
+      <button class="auth-switch" id="show-signup" type="button">Create an account</button>
+    </form>
+    <form id="signup-form" hidden>
+      <label for="signup-username">Username</label>
+      <input id="signup-username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+">
+      <label for="signup-email">Email</label>
+      <input id="signup-email" type="email" autocomplete="email" required maxlength="254">
+      <label for="signup-password">Password <span>(12 characters minimum)</span></label>
+      <input id="signup-password" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+      <label for="signup-confirm">Confirm password</label>
+      <input id="signup-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="128">
+      <button class="auth-submit" type="submit">Create account</button>
+      <button class="auth-switch" id="show-login" type="button">Already have an account? Log in</button>
+    </form>
+    <p id="auth-error" class="auth-error" role="alert" aria-live="polite" hidden></p>
+  </main>
+  <script>
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const next = new URLSearchParams(location.search).get('next');
+    const destination = next && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : '/';
+    let csrfToken = '';
+    async function api(path, body) {
+      const headers = {};
+      if (body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+      const response = await fetch(path, {
+        method: body === undefined ? 'GET' : 'POST', headers,
+        body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Request failed.');
+      return data;
+    }
+    function error(message = '') {
+      $('auth-error').textContent = message;
+      $('auth-error').hidden = !message;
+    }
+    async function finish(result) {
+      if (result && result.user) location.assign(destination);
+    }
+    $('show-signup').addEventListener('click', () => {
+      $('login-form').hidden = true; $('signup-form').hidden = false; error();
+    });
+    $('show-login').addEventListener('click', () => {
+      $('signup-form').hidden = true; $('login-form').hidden = false; error();
+    });
+    $('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); error();
+      try {
+        await finish(await api('/api/auth/login', {
+          identifier: $('login-identifier').value.trim(), password: $('login-password').value,
+        }));
+      } catch (e) { error(e.message); }
+    });
+    $('signup-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); error();
+      if ($('signup-password').value !== $('signup-confirm').value) return error('Passwords do not match.');
+      try {
+        await finish(await api('/api/auth/signup', {
+          username: $('signup-username').value.trim(), email: $('signup-email').value.trim(),
+          password: $('signup-password').value,
+        }));
+      } catch (e) { error(e.message); }
+    });
+    (async () => {
+      try {
+        csrfToken = (await api('/api/auth/csrf')).csrf_token;
+        await finish(await api('/api/auth/me'));
+      } catch (e) {
+        if (!e.message.includes('sign in')) error(e.message);
+      }
+    })();
+  </script>
+</body>
+</html>

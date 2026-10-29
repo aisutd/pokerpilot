@@ -9,17 +9,29 @@ from __future__ import annotations
 import math
 import os
 import secrets
+import sys
 import threading
 import time
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory, session
+# The DQN and XGBoost opponent use separate OpenMP runtimes. A single worker
+# avoids native thread-runtime crashes when a process uses both model stacks.
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify, redirect, request, send_from_directory, session, url_for
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+load_dotenv(ROOT_DIR / '.env')
+from backend.auth_routes import get_user, register_auth, require_auth, require_csrf  # noqa: E402
 
 from engine.bots import DIFFICULTIES
 from engine.game import HUMAN_SEAT, GameError, Table
 from engine.opponent_models import OPPONENT_MODELS, list_models
 
 STATIC_DIR = Path(__file__).parent / 'static'
+CARD_ASSET_DIR = ROOT_DIR / 'Assets' / 'Cards'
 CHAT_BUILD_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
 ADVISOR_CHECKPOINT = Path(__file__).parent / 'dqn_model_surya' / 'checkpoints' / 'pokerpilot_dqn.pt'
 MAX_MATCHES = 500
@@ -27,6 +39,8 @@ IDLE_SECONDS = 6 * 60 * 60
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
 app.secret_key = os.environ.get('POKERPILOT_SECRET') or secrets.token_hex(32)
+app.config['SESSION_COOKIE_NAME'] = 'pokerpilot_singleplayer_session'
+register_auth(app)
 
 matches: dict[str, tuple[Table, float]] = {}
 matches_lock = threading.Lock()
@@ -70,11 +84,23 @@ def handle_game_error(error: GameError):
 
 @app.get('/')
 def index():
+    try:
+        if get_user() is None:
+            return redirect(url_for('pokerpilot_auth.auth_page', next='/'))
+    except Exception:
+        app.logger.exception('Unable to check the account session.')
+        return jsonify({'detail': 'Authentication storage is unavailable.'}), 503
     return send_from_directory(STATIC_DIR, 'index.html')
+
+
+@app.get('/cards/deck.svg')
+def card_deck_asset():
+    return send_from_directory(CARD_ASSET_DIR, 'deck.svg', mimetype='image/svg+xml')
 
 
 @app.get('/chat')
 @app.get('/chat/')
+@require_auth
 def chat_index():
     return send_from_directory(CHAT_BUILD_DIR, 'index.html')
 
@@ -85,6 +111,7 @@ def chat_asset(filename: str):
 
 
 @app.get('/api/chat-room')
+@require_auth
 def chat_room():
     match_id = session.get('match_id')
 
@@ -103,6 +130,7 @@ def chat_room():
 
 
 @app.get('/api/models')
+@require_auth
 def models():
     """AI models the player can pick for the opponents, and which are ready."""
 
@@ -110,6 +138,8 @@ def models():
 
 
 @app.post('/api/new')
+@require_auth
+@require_csrf
 def new_match():
     payload = request.get_json(silent=True) or {}
     difficulty = payload.get('difficulty')
@@ -136,6 +166,7 @@ def new_match():
 
 
 @app.get('/api/state')
+@require_auth
 def state():
     if session.get('match_id') not in matches:
         return jsonify(None)  # no match yet; the client stays in the lobby
@@ -147,6 +178,8 @@ def state():
 
 
 @app.post('/api/advice')
+@require_auth
+@require_csrf
 def advice():
     match = current_match()
 
@@ -200,6 +233,8 @@ def advice():
 
 
 @app.post('/api/action')
+@require_auth
+@require_csrf
 def action():
     payload = request.get_json(silent=True) or {}
     kind = payload.get('action')
@@ -225,6 +260,8 @@ def action():
 
 
 @app.post('/api/next')
+@require_auth
+@require_csrf
 def next_hand():
     match = current_match()
 

@@ -144,6 +144,8 @@ class WebsiteAdvisorTest(unittest.TestCase):
 
         match_id = f'dqn-test-{id(self)}'
         client = app.test_client()
+        client.set_cookie('pokerpilot_session', 'test-session')
+        client.set_cookie('pokerpilot_csrf', 'test-csrf')
         with client.session_transaction() as flask_session:
             flask_session['match_id'] = match_id
         matches[match_id] = (table, time.time())
@@ -158,7 +160,12 @@ class WebsiteAdvisorTest(unittest.TestCase):
                     'action_names': list(ACTION_NAMES),
                 }, checkpoint)
                 with patch('app.ADVISOR_CHECKPOINT', checkpoint):
-                    response = client.post('/api/advice', json={})
+                    with patch('backend.auth_routes.auth.session_user', return_value={
+                        'id': 1, 'username': 'test', 'email': 'test@example.test',
+                    }):
+                        response = client.post(
+                            '/api/advice', json={}, headers={'X-CSRF-Token': 'test-csrf'}
+                        )
 
             self.assertEqual(response.status_code, 200)
             recommendation = response.get_json()
