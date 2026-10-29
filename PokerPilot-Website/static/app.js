@@ -674,7 +674,7 @@ async function requestAdvice() {
     const recommendation = await api('/api/advice', {});
     if (requestId !== adviceRequest) return;
     $('dqn-advice-result').textContent =
-      `${recommendation.label} · estimated Q-value ${recommendation.q_value_bb.toFixed(2)} BB`;
+      `${recommendation.label}${recommendation.explanation ? ` — ${recommendation.explanation}` : ''}`;
     $('dqn-advice-result').hidden = false;
   } catch (error) {
     if (requestId === adviceRequest) showError(`AI advisor unavailable: ${error.message}`);

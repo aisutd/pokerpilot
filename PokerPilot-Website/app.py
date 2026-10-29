@@ -6,6 +6,7 @@ Run with:  python app.py   then open http://127.0.0.1:5000
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import secrets
@@ -45,6 +46,35 @@ register_auth(app)
 matches: dict[str, tuple[Table, float]] = {}
 matches_lock = threading.Lock()
 match_chat_rooms: dict[str, str] = {}
+
+
+def gemini_explanation(view: dict, action: str, label: str) -> str:
+    """Turn the numerical poker recommendation into a concise plain-language explanation."""
+    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not api_key:
+        return f"The advisor recommends {label.lower()}. Review your position and the betting action before choosing."
+
+    try:
+        from google import genai
+
+        prompt = f"""
+You are a poker coach helping a beginner. Explain the recommended action in plain English.
+Use 2-4 short sentences. Do not use equations, percentages, mathematical notation, or DQN/Q-values.
+Mention the most important table factors naturally, but do not claim certainty about hidden cards.
+Recommended action: {label}
+Table state (JSON):
+{json.dumps(view, ensure_ascii=False)[:6000]}
+"""
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
+            contents=prompt,
+        )
+        text = getattr(response, 'text', None)
+        return text.strip() if text and text.strip() else f"The advisor recommends {label.lower()}."
+    except Exception:
+        app.logger.exception('Gemini explanation generation failed.')
+        return f"The advisor recommends {label.lower()}. Review your position and the betting action before choosing."
 
 
 def prune() -> None:
@@ -224,11 +254,13 @@ def advice():
         else:
             label = f'Raise to ${amount / 100:,.2f}'
 
+        explanation = gemini_explanation(match.view(), action, label)
         return jsonify({
             'action': action,
             'amount': amount,
             'label': label,
             'q_value_bb': q_values[chosen],
+            'explanation': explanation,
         })
 
 

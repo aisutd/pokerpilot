@@ -62,13 +62,47 @@ Training uses deterministic Python, NumPy, PyTorch, engine, and bot seeds. The
 evaluation command refuses fewer than 10,000 hands, uses unseen engine seeds and
 the dataset's test-split style mix, and reports net BB/100 plus a 95% bootstrap
 confidence interval over independent 100-hand evaluation blocks (resampling
-blocks estimates how uncertain the measured rate is). It reports
-measured output only; it does not claim a positive win rate before a real run.
-Training does not consume the test split.
+blocks estimates how uncertain the measured rate is). It also reports the
+profitable, break-even, and losing hand percentages with block-bootstrap
+confidence intervals. These are outcome rates, not decision accuracy: the
+dataset contains no ground-truth labels for the correct action in a poker
+decision. Training does not consume the test split.
+
+To improve performance, compare checkpoints by held-out BB/100 and its
+confidence interval, not by hand win percentage alone: a small number of large
+losses can outweigh many small winning hands. A longer run such as 200,000
+training hands is a reasonable experiment, but more hands do not guarantee
+improvement. Use a separate validation setup for tuning, and reserve the test
+split for a final unbiased comparison.
 
 The website's `/api/advice` endpoint and **Ask AI Advisor** button use
 `checkpoints/pokerpilot_dqn.pt` after training. The existing WebSocket chat relay
 is unchanged and continues to carry player-to-player chat.
+
+## Gemini textual explanations
+
+After the DQN selects a legal action, the website can ask Gemini to explain the
+recommendation in plain English. Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`) and
+restart Flask. The optional `GEMINI_MODEL` variable defaults to
+`gemini-2.5-flash`. If the API key is missing or Gemini is unavailable, the
+advisor returns a short built-in fallback instead of failing.
+
+The browser displays the action and textual explanation; it no longer presents
+DQN's mathematical Q-value to the player.
+
+To test the live integration, install dependencies, export the key in the same
+terminal that starts Flask, and run the website:
+
+```bash
+python -m pip install -r requirements.txt
+export GEMINI_API_KEY="your-key-here"
+python app.py
+```
+
+Start a game in the browser, click **Ask AI Advisor** on your turn, and verify
+that a plain-language explanation appears. Set `GEMINI_MODEL` only if you want a
+model other than `gemini-2.5-flash`. Do not commit the key. Without the key or
+if Gemini fails, the endpoint still returns its built-in fallback explanation.
 
 ## Step 6: comments and learning notes
 
