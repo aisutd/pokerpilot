@@ -16,9 +16,11 @@ let busy = false;
 let epoch = 0; // bumped when leaving the table, to cancel animations
 let seatEls = null;
 let chatRequest = 0;
-let globalBoard = { standings: [] };
-let refreshingBoard = false;
-let leaderboardMode = 'global';
+let adviceRequest = 0;
+let adviceBusy = false;
+let models = [];             // from /api/models
+let selectedModel = 'rules'; // which AI model the opponents use
+const MODEL_KEY = 'pokerpilot.model';
 
 // ------------------------------------------------------------- helpers
 
@@ -40,9 +42,15 @@ function prettyCard(code) {
 }
 
 async function api(path, body) {
+  const headers = {};
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    const csrf = document.cookie.split('; ').find((item) => item.startsWith('pokerpilot_csrf='));
+    if (csrf) headers['X-CSRF-Token'] = decodeURIComponent(csrf.slice('pokerpilot_csrf='.length));
+  }
   const options = body === undefined
     ? { method: 'GET' }
-    : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+    : { method: 'POST', headers, body: JSON.stringify(body) };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let response;
@@ -65,10 +73,11 @@ async function api(path, body) {
     throw new Error('The server sent an unexpected response.');
   }
 
-  if (!response.ok) throw new Error((data && data.error) || 'Something went wrong.');
-  if (data && data.global_leaderboard) {
-    globalBoard = data.global_leaderboard;
-    renderLeaderboard(globalBoard);
+  if (!response.ok) {
+    if (response.status === 401) {
+      location.assign(`/auth?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
+    }
+    throw new Error((data && (data.detail || data.error)) || 'Something went wrong.');
   }
   return data;
 }
@@ -83,6 +92,14 @@ function showError(message) {
     $(id).hidden = !message;
     $(id).textContent = message || '';
   }
+}
+
+function clearAdvice() {
+  adviceRequest += 1;
+  adviceBusy = false;
+  $('dqn-advice-result').hidden = true;
+  $('dqn-advice-result').textContent = '';
+  $('dqn-advice').textContent = 'Ask AI Advisor';
 }
 
 async function connectChat() {
@@ -163,6 +180,7 @@ function cardElement(code) {
   if (!code) {
     el.classList.add('back');
     el.setAttribute('aria-label', 'Face-down card');
+    appendCardArt(el, 'card-back');
     return el;
   }
 
@@ -171,17 +189,29 @@ function cardElement(code) {
     return el;
   }
 
+  if (!/^[2-9TJQKA][shdc]$/.test(code)) {
+    el.classList.add('slot');
+    return el;
+  }
   if (RED_SUITS.has(code[1])) el.classList.add('red');
   el.setAttribute('aria-label', prettyCard(code));
-
-  const rank = document.createElement('span');
-  rank.className = 'rank';
-  rank.textContent = code[0] === 'T' ? '10' : code[0];
-  const suit = document.createElement('span');
-  suit.className = 'suit';
-  suit.textContent = SUITS[code[1]];
-  el.append(rank, suit);
+  appendCardArt(el, `card-${code}`);
   return el;
+}
+
+function appendCardArt(container, symbol) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'card-face-svg');
+  svg.setAttribute('viewBox', '0 0 250 350');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  const href = `/cards/deck.svg#${symbol}`;
+  use.setAttribute('href', href);
+  use.setAttribute('width', '250');
+  use.setAttribute('height', '350');
+  use.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', href);
+  svg.append(use);
+  container.append(svg);
 }
 
 function renderCards(container, codes) {
@@ -303,7 +333,7 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
 
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const difficulty = v.difficulty[0].toUpperCase() + v.difficulty.slice(1);
-  $('street').textContent = `${v.hand_over ? 'Hand over' : v.street} · ${difficulty}`;
+  $('street').textContent = `${v.hand_over ? 'Hand over' : v.street} · ${difficulty} · ${modelLabel(v.model)}`;
   const chatPlayers = v.seats.map((seat) => seat.name).join(' · ');
   $('chat-player-names').textContent = chatPlayers;
   $('chat-player-names').title = chatPlayers;
@@ -318,7 +348,6 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
 
   renderResult(v);
   renderLog(v);
-  renderLeaderboard(globalBoard);
   renderControls(v, animating, thinking);
 
   const over = v.game_over && !animating;
@@ -329,54 +358,6 @@ function render(v, { animating = false, thinkingSeat = null } = {}) {
       ? `You beat all five AI players on ${v.difficulty} in ${v.hand_number} hands.`
       : `You lasted ${v.hand_number} hands on ${v.difficulty}. Ready for another go?`;
   }
-}
-
-function renderLeaderboard(board) {
-  const isGlobal = leaderboardMode === 'global';
-  const ranking = isGlobal ? board : (view && view.leaderboard);
-  $('leaderboard-global').setAttribute('aria-pressed', String(isGlobal));
-  $('leaderboard-game').setAttribute('aria-pressed', String(!isGlobal));
-  $('leaderboard-description').textContent = isGlobal
-    ? 'All players, ranked by total net winnings across completed rounds.'
-    : 'Players at this table, ranked by net profit in this game.';
-  for (const id of ['leaderboard-table', 'final-leaderboard']) {
-    const host = $(id);
-    host.replaceChildren();
-    if (!ranking) continue;
-    const table = document.createElement('table');
-    table.className = 'leaderboard-table';
-    const head = table.createTHead().insertRow();
-    for (const label of ['Rank', 'Player', isGlobal ? 'Total net winnings' : 'Game net profit', 'Rounds participated']) {
-      const th = document.createElement('th');
-      th.scope = 'col';
-      th.textContent = label;
-      head.append(th);
-    }
-    const body = table.createTBody();
-    for (const player of ranking.standings) {
-      const row = body.insertRow();
-      const profit = isGlobal ? player.net_winnings_cents : Math.round(player.net_profit * 100);
-      const values = [player.rank, player.name,
-        `${profit > 0 ? '+' : profit < 0 ? '−' : ''}${money(Math.abs(profit))}`,
-        isGlobal ? player.rounds_participated : player.hands_played];
-      values.forEach((value) => { const cell = row.insertCell(); cell.textContent = value; });
-      if (isGlobal ? player.is_you : player.player_id === String(HUMAN)) row.classList.add('leaderboard-you');
-    }
-    if (!ranking.standings.length) {
-      const empty = document.createElement('p');
-      empty.className = 'leaderboard-note';
-      empty.textContent = 'No players yet. Start playing to join the leaderboard.';
-      host.append(empty);
-    } else host.append(table);
-  }
-}
-
-for (const [id, mode] of [['leaderboard-global', 'global'], ['leaderboard-game', 'game']]) {
-  $(id).addEventListener('click', () => {
-    leaderboardMode = mode;
-    $('leaderboard').classList.toggle('show-game-rankings', mode === 'game');
-    renderLeaderboard(globalBoard);
-  });
 }
 
 function renderResult(v) {
@@ -421,6 +402,7 @@ function renderControls(v, animating, thinking) {
   const legal = !animating && !busy ? v.legal : null;
   $('actions').hidden = !legal;
   $('hand-done').hidden = animating || busy || !v.hand_over || v.game_over;
+  $('dqn-advice').disabled = !legal || adviceBusy;
 
   const waiting = $('waiting');
   waiting.hidden = Boolean(legal) || (v.hand_over && !animating && !busy);
@@ -529,7 +511,7 @@ async function resync() {
   // After an error, show the server's real state so the buttons come back.
   try {
     const data = await api('/api/state');
-    if (data && data.view && !data.view.session_finished) {
+    if (data && data.view) {
       render(data.view);
       return;
     }
@@ -541,6 +523,7 @@ async function resync() {
 
 async function send(path, body) {
   if (busy) return;
+  clearAdvice();
   busy = true;
   showError(null);
 
@@ -568,8 +551,69 @@ async function send(path, body) {
   }
 }
 
-async function startGame(difficulty) {
+// ------------------------------------------------------- AI model picker
+
+function modelLabel(key) {
+  const model = models.find((m) => m.key === key);
+  return model ? model.label : key;
+}
+
+function renderModels() {
+  const box = $('model-options');
+  box.replaceChildren();
+
+  for (const model of models) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'model-option';
+    button.setAttribute('role', 'radio');
+    button.dataset.model = model.key;
+    button.textContent = model.label;
+    button.disabled = !model.available;
+    button.setAttribute('aria-checked', String(model.key === selectedModel));
+    button.title = model.available ? model.description : model.reason;
+
+    if (!model.available) {
+      const lock = document.createElement('span');
+      lock.className = 'lock';
+      lock.setAttribute('aria-hidden', 'true');
+      lock.textContent = '🔒';
+      button.append(lock);
+    }
+
+    button.addEventListener('click', () => selectModel(model.key));
+    box.append(button);
+  }
+
+  const current = models.find((m) => m.key === selectedModel);
+  $('model-description').textContent = current ? current.description : '';
+}
+
+function selectModel(key) {
+  const model = models.find((m) => m.key === key);
+  if (!model || !model.available) return;
+  selectedModel = key;
+  try { localStorage.setItem(MODEL_KEY, key); } catch { /* storage blocked */ }
+  renderModels();
+}
+
+async function loadModels() {
+  try {
+    ({ models } = await api('/api/models'));
+  } catch {
+    models = [{ key: 'rules', label: 'Classic Bots', description: '', available: true }];
+  }
+
+  let saved = null;
+  try { saved = localStorage.getItem(MODEL_KEY); } catch { /* storage blocked */ }
+  const usable = (key) => models.some((m) => m.key === key && m.available);
+  selectedModel = usable(saved) ? saved : 'rules';
+  renderModels();
+}
+
+async function startGame(difficulty, model = selectedModel) {
   if (busy) return;
+  clearAdvice();
   disconnectChat();
   busy = true;
   showError(null);
@@ -580,7 +624,7 @@ async function startGame(difficulty) {
   let response = null;
 
   try {
-    [response] = await Promise.all([api('/api/new', { difficulty }), sleep(LOADING_MIN_MS)]);
+    [response] = await Promise.all([api('/api/new', { difficulty, model }), sleep(LOADING_MIN_MS)]);
     showScreen('game');
     connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     await playFrames(response.frames, myEpoch);
@@ -615,6 +659,35 @@ function act(action) {
   send('/api/action', { action });
 }
 
+async function requestAdvice() {
+  if (adviceBusy || busy || !view || !view.legal) return;
+  const requestId = ++adviceRequest;
+  adviceBusy = true;
+  busy = true;
+  $('dqn-advice').textContent = 'Thinking…';
+  $('dqn-advice-result').hidden = true;
+  render(view);
+  $('waiting').textContent = 'AI advisor is thinking…';
+  showError(null);
+
+  try {
+    const recommendation = await api('/api/advice', {});
+    if (requestId !== adviceRequest) return;
+    $('dqn-advice-result').textContent =
+      `${recommendation.label}${recommendation.explanation ? ` — ${recommendation.explanation}` : ''}`;
+    $('dqn-advice-result').hidden = false;
+  } catch (error) {
+    if (requestId === adviceRequest) showError(`AI advisor unavailable: ${error.message}`);
+  } finally {
+    if (requestId === adviceRequest) {
+      adviceBusy = false;
+      busy = false;
+      $('dqn-advice').textContent = 'Ask AI Advisor';
+      if (view) render(view);
+    }
+  }
+}
+
 document.querySelectorAll('#lobby .mode').forEach((button) => {
   button.addEventListener('click', () => startGame(button.dataset.difficulty));
 });
@@ -622,8 +695,9 @@ document.querySelectorAll('#lobby .mode').forEach((button) => {
 $('btn-fold').addEventListener('click', () => act('fold'));
 $('btn-call').addEventListener('click', () => act('check_call'));
 $('btn-raise').addEventListener('click', () => act('raise'));
+$('dqn-advice').addEventListener('click', requestAdvice);
 $('next-hand').addEventListener('click', () => send('/api/next', {}));
-$('play-again').addEventListener('click', () => startGame(view.difficulty));
+$('play-again').addEventListener('click', () => startGame(view.difficulty, view.model));
 
 $('raise-caret').addEventListener('click', () => {
   const caret = $('raise-caret');
@@ -667,12 +741,9 @@ function toggleHistory(open) {
 $('history-toggle').addEventListener('click', () => toggleHistory($('history').hidden));
 $('history-close').addEventListener('click', () => toggleHistory(false));
 
-async function toLobby() {
-  if (view) {
-    try { await api('/api/quit', {}); }
-    catch (error) { showError(error.message); return; }
-  }
+function toLobby() {
   epoch += 1;
+  clearAdvice();
   busy = false;
   disconnectChat();
   toggleHistory(false);
@@ -681,6 +752,14 @@ async function toLobby() {
 }
 
 $('to-lobby').addEventListener('click', toLobby);
+$('logout').addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', {});
+    location.assign('/auth');
+  } catch (error) {
+    showError(error.message);
+  }
+});
 $('quit').addEventListener('click', () => {
   if (view && !view.hand_over && !view.game_over
       && !confirm('Leave this table? Starting a new game will forfeit it.')) return;
@@ -699,32 +778,20 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'n' && view && view.hand_over && !view.game_over && !busy) send('/api/next', {});
 });
 
-// Other users' completed rounds become visible without reloading this page.
-async function refreshGlobalLeaderboard() {
-  if (refreshingBoard || document.hidden) return;
-  refreshingBoard = true;
+async function initializeApp() {
   try {
-    globalBoard = await api('/api/leaderboard');
-    renderLeaderboard(globalBoard);
-    $('global-leaderboard-message').textContent = '';
-  } catch (error) {
-    $('global-leaderboard-message').textContent = 'Could not refresh rankings. Retrying shortly.';
-  } finally { refreshingBoard = false; }
-}
-
-async function initialize() {
-  try {
-    await refreshGlobalLeaderboard();
+    const { user } = await api('/api/auth/me');
+    $('account-name').textContent = user.username;
+    await loadModels();
     const data = await api('/api/state');
-    if (data && data.view && !data.view.session_finished) {
+    if (data && data.view) {
       showScreen('game');
       render(data.view);
       connectChat().catch((error) => showError(`Chat unavailable: ${error.message}`));
     }
-  } catch (error) { showError(error.message); }
+  } catch (error) {
+    showError(error.message);
+  }
 }
-initialize();
-setInterval(refreshGlobalLeaderboard, 10000);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) refreshGlobalLeaderboard();
-});
+
+initializeApp();

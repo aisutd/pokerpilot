@@ -1,100 +1,78 @@
-"""Persistent, server-authoritative global winnings ledger (integer cents)."""
-from contextlib import contextmanager
-from pathlib import Path
-import secrets
-import sqlite3
+"""Supabase PostgreSQL leaderboard storage. No SQLite fallback.
+
+The application must load DATABASE_URL from the root .env before using this
+store. Apply backend/migrations/002_leaderboard.sql in Supabase first.
+"""
+
+from backend.auth import connect
 
 
 class LeaderboardStore:
-    def __init__(self, path):
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as db:
-            db.executescript('''
-                CREATE TABLE IF NOT EXISTS players (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
-                CREATE TABLE IF NOT EXISTS round_results (
-                    game_id TEXT NOT NULL,
-                    round_number INTEGER NOT NULL CHECK(round_number > 0),
-                    player_id TEXT NOT NULL REFERENCES players(id),
-                    net_cents INTEGER NOT NULL,
-                    saved_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY(game_id, round_number, player_id)
-                );
-                CREATE INDEX IF NOT EXISTS results_by_player ON round_results(player_id);
-                CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            ''')
-
-    @contextmanager
-    def connect(self):
-        db = sqlite3.connect(self.path, timeout=15)
-        db.row_factory = sqlite3.Row
-        db.execute('PRAGMA foreign_keys = ON')
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
-
-    def session_secret(self):
-        with self.connect() as db:
-            db.execute('INSERT OR IGNORE INTO settings VALUES (?, ?)',
-                       ('session_secret', secrets.token_hex(32)))
-            return db.execute('SELECT value FROM settings WHERE key = ?',
-                              ('session_secret',)).fetchone()['value']
-
     def profile(self, player_id):
-        with self.connect() as db:
-            row = db.execute('SELECT id, name FROM players WHERE id = ?', (player_id,)).fetchone()
-            return dict(row) if row else None
+        with connect() as db:
+            row = db.execute(
+                'SELECT id, name FROM pokerpilot.leaderboard_players WHERE id = %s',
+                (player_id,),
+            ).fetchone()
+        return dict(row) if row else None
 
-    def create_player(self):
-        player_id = secrets.token_urlsafe(24)
-        name = 'Player-' + secrets.token_hex(5)
-        with self.connect() as db:
-            db.execute('INSERT INTO players(id, name) VALUES (?, ?)', (player_id, name))
-        return {'id': player_id, 'name': name}
+    def ensure_player(self, player_id, name):
+        """Register a server-authenticated account using its stable account ID.
 
-    def rename_player(self, player_id, name):
-        if not isinstance(name, str):
-            raise ValueError('Enter a display name.')
-        name = name.strip()
-        if not 2 <= len(name) <= 24 or any(ord(c) < 32 for c in name):
-            raise ValueError('Use a display name of 2–24 characters.')
-        try:
-            with self.connect() as db:
-                db.execute('UPDATE players SET name = ? WHERE id = ?', (name, player_id))
-        except sqlite3.IntegrityError:
-            raise ValueError('That display name is already taken.') from None
-        return self.profile(player_id)
+        Existing historical browser profiles must be linked explicitly, rather
+        than matched by display name. A name conflict raises a database error.
+        """
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError('A display name is required.')
+        with connect() as db:
+            row = db.execute('''
+                INSERT INTO pokerpilot.leaderboard_players (id, name)
+                VALUES (%s, %s)
+                ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+                RETURNING id, name
+            ''', (str(player_id), name.strip())).fetchone()
+        return dict(row)
 
     def save_rounds(self, player_id, game_id, results):
-        """Retries and page reloads cannot count the same settled round twice."""
-        with self.connect() as db:
-            db.executemany('''INSERT OR IGNORE INTO round_results
-                (game_id, round_number, player_id, net_cents) VALUES (?, ?, ?, ?)''',
-                [(game_id, row['round_number'], player_id, row['net_cents']) for row in results])
+        """Save engine-settled results atomically; retries cannot double-credit.
+
+        Results contain round_number and net_cents (integer cents). Callers
+        must obtain these from the engine, never browser-supplied scores.
+        """
+        rows = []
+        for row in results:
+            number, cents = row['round_number'], row['net_cents']
+            if type(number) is not int or number <= 0 or type(cents) is not int:
+                raise ValueError('Expected a positive round number and integer cents.')
+            rows.append((game_id, number, str(player_id), cents))
+        if not rows:
+            return
+        with connect() as db:
+            with db.cursor() as cursor:
+                cursor.executemany('''
+                    INSERT INTO pokerpilot.leaderboard_round_results
+                        (game_id, round_number, player_id, net_cents)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (game_id, round_number, player_id) DO NOTHING
+                ''', rows)
 
     def standings(self, player_id=None):
-        with self.connect() as db:
+        with connect() as db:
             rows = db.execute('''
                 SELECT p.id AS player_id, p.name,
-                       COALESCE(SUM(r.net_cents), 0) AS net_winnings_cents,
+                       COALESCE(SUM(r.net_cents), 0)::BIGINT AS net_winnings_cents,
                        COUNT(r.round_number) AS rounds_participated
-                FROM players p LEFT JOIN round_results r ON r.player_id = p.id
-                GROUP BY p.id
-                ORDER BY net_winnings_cents DESC, p.name COLLATE NOCASE, p.id
+                FROM pokerpilot.leaderboard_players p
+                LEFT JOIN pokerpilot.leaderboard_round_results r ON r.player_id = p.id
+                GROUP BY p.id, p.name
+                ORDER BY net_winnings_cents DESC, lower(p.name), p.id
             ''').fetchall()
-        standings = []
-        prior_score = None
-        rank = 0
+        standings, prior_score, rank = [], None, 0
         for index, row in enumerate(rows, 1):
             score = row['net_winnings_cents']
             if score != prior_score:
-                rank = index
-                prior_score = score
-            standings.append(dict(row) | {'rank': rank, 'is_you': row['player_id'] == player_id})
+                rank, prior_score = index, score
+            standings.append(dict(row) | {
+                'rank': rank, 'is_you': row['player_id'] == str(player_id),
+            })
         return {'standings': standings, 'ranking': 'cumulative_net_winnings', 'currency': 'USD'}

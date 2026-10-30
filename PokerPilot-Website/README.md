@@ -56,13 +56,14 @@ network, so phones on the same Wi-Fi can open `http://<your computer's IP>:5000`
 The chat API listens on port 3000. Set `VITE_CHAT_WS_URL` before building the
 client if the WebSocket server is hosted at a different URL.
 
-Run the poker tests with `python -m unittest tests.test_game tests.test_chat_room`
+Run the poker and DQN tests with
+`python -m unittest tests.test_game tests.test_chat_room tests.test_dqn_model tests.test_opponent_models`
 (from this folder, inside the virtual environment), and the chat relay test
 with `npm test --prefix ../chat-api`.
 
 ## How to play
 
-1. Pick **Easy**, **Medium** or **Hard** in the lobby.
+1. Pick the **Opponent AI** model, then **Easy**, **Medium** or **Hard** in the lobby.
 2. You sit at a six-seat table with five AI players: MathNinja,
    CardShark88, RiverRat, LuckyLlama and TiltMaster. Everyone starts with
    $200; blinds are $1/$2. The dealer button moves clockwise every hand.
@@ -80,6 +81,26 @@ corner while a game is active. It uses the React chat UI and WebSocket API
 from the `websockets` branch, including emoji selection. Each game gets a
 private chat room; chat messages are only broadcast to clients connected to
 that game's room.
+
+## Opponent AI (PvE)
+
+Above the difficulty cards, **Opponent AI** picks which model drives the five
+AI players:
+
+| Model        | What it is |
+|--------------|------------|
+| Classic Bots | The hand-written strategy in `engine/bots.py` (default). |
+| XGBoost      | The team model in [`../pokerpilot_model`](../pokerpilot_model), trained to play like the dataset's winning players. The game builds the same features the model was trained on (hand strength, pot odds, position, opponent stats, ...) for each decision. |
+| DQN          | Surya's agent in [`dqn_model_surya/`](./dqn_model_surya/). Locked until a checkpoint is trained. |
+
+A model that can't load yet (missing package or trained file) shows a lock,
+and hovering it says what's missing. With an ML model, difficulty sets how
+closely the bots follow it: **Hard** almost always takes the model's best
+action, **Medium** samples from its probabilities, **Easy** plays loosely and
+blunders more. Each character's personality still nudges the model (TiltMaster
+bets more, RiverRat folds less).
+
+To add another model, see the notes at the top of `engine/opponent_models.py`.
 
 ## Difficulty
 
@@ -102,6 +123,7 @@ see your hole cards.
 app.py            Flask server and JSON API
 engine/game.py    6-max table logic on top of pokerkit's State
 engine/bots.py    AI players (skill levels and personalities)
+engine/opponent_models.py  Opponent AI picker: XGBoost and DQN bots
 static/           Lobby, loading screen and table (HTML/CSS/JS, no build step)
 ../client/        React chat UI (built into client/dist for Flask to serve)
 ../chat-api/      Node.js WebSocket chat relay (port 3000)
@@ -115,62 +137,37 @@ Amounts are integer cents.
 
 | Method | Path          | Body |
 |--------|---------------|------|
-| POST   | `/api/new`    | `{"difficulty": "easy\|medium\|hard"}` |
+| GET    | `/api/models` | none (lists the opponent AI models and whether each is ready) |
+| POST   | `/api/new`    | `{"difficulty": "easy\|medium\|hard", "model": "rules\|xgboost\|dqn"}` (`model` defaults to `rules`) |
 | GET    | `/api/state`  | none |
+| POST   | `/api/advice` | `{}` (requires a trained DQN checkpoint) |
 | POST   | `/api/action` | `{"action": "fold\|check_call\|raise", "amount": 4500}` |
 | POST   | `/api/next`   | none (deals the next hand) |
 
-Each POST returns `{"frames": [...], "view": {...}}`: one frame per AI
-action so the page can animate them, then the final state.
+Game actions return `{"frames": [...], "view": {...}}`: one frame per AI
+action so the page can animate them, then the final state. `/api/advice` returns
+`{"action": ..., "amount": ..., "label": ..., "q_value_bb": ...}`.
+
+The DQN training, evaluation, and environment adapter are in
+[`dqn_model_surya/`](./dqn_model_surya/). Train it and run its 10,000-hand
+held-out evaluation as described in that folder's README. The advisor endpoint
+then serves its recommendation separately from the existing player-to-player
+WebSocket chat service. The poker engine remains unchanged.
+
+The website's **Ask AI Advisor** button requires a trained checkpoint; before
+training, it returns a clear unavailable response rather than a fabricated
+recommendation.
 
 Games are kept in server memory and are lost when the server restarts. For
 a deployment, set `POKERPILOT_SECRET` so session cookies survive restarts,
 and run the app behind a production WSGI server such as waitress.
 
-## Global leaderboard
+## Supabase leaderboard
 
-The narrow sidebar shows real players across all games ranked by **total net
-winnings** (wins add and losses subtract), plus rounds participated. AI opponents
-are excluded. Ties share a rank. Results update after completed hands; unfinished
-hands are not counted. Starting a new game does not reset totals. Other players'
-results refresh every ten seconds. The final-results dialog shows the same global
-rankings.
-
-Choose a display name in the lobby. The signed browser session identifies the
-player for one year and survives server restarts. These are browser profiles,
-not password-protected accounts: another device or clearing cookies creates a
-new profile. Names are unique, but a name alone cannot recover an old profile.
-
-SQLite stores players and an immutable round ledger in
-`instance/leaderboard.sqlite3` (excluded from Git). Each settled round has a unique
-(game, round, player) key to prevent duplicate credit on retries or reloads.
-Balances come from the poker engine, never a browser-supplied score. Amounts are
-stored as integer cents. Back up the database to preserve results. Set
-`POKERPILOT_DB` to override its path and `POKERPILOT_SECRET` to override the signing
-key (otherwise a persistent random key is stored in the database). Restarting
-still clears in-progress games; completed rounds remain saved.
-
-This board is shared by users of this server. Public internet access requires
-hosting this application with persistent database storage. Multiple independent
-servers need a shared database rather than separate SQLite files.
-
-API: `GET/POST /api/profile` reads/renames the current browser profile;
-`GET /api/leaderboard` returns global standings. Game API responses also include
-`global_leaderboard`. The existing per-table engine snapshot remains available
-internally for settled game results.
-
-Tests: `python -m unittest discover -s tests -v` (uses temporary databases).
-
-### Global and this-game rankings
-
-The sidebar has **Global** and **This game** buttons. Global aggregates real
-players across games; This game ranks all six table players, including bots, by
-net profit since that game started. Both count completed rounds. This game resets
-when a new game starts; global totals remain saved.
-
-### Leaderboard page
-
-Open `/leaderboard` from **View leaderboards** on the game dashboard. The page
-shows global rankings and current-game standings, refreshes every ten seconds,
-and links back to the dashboard. It uses the same existing leaderboard APIs and
-database as the sidebar. A game is not required to view global standings.
+Apply `backend/migrations/002_leaderboard.sql` in Supabase. Configure
+`DATABASE_URL` in the repository root `.env` (never commit credentials).
+Completed single-player hands save integer-cent results for the authenticated
+account. `GET /api/leaderboard` returns cumulative standings while signed in.
+Round keys prevent duplicate credit; reload `/api/state` to retry a failed save.
+The game API uses PostgreSQL only; existing SQLite files are not imported.
+Pending results are held in memory until saved and will be lost on restart.

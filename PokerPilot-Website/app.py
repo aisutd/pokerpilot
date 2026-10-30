@@ -6,75 +6,111 @@ Run with:  python app.py   then open http://127.0.0.1:5000
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import secrets
-import sqlite3
+import sys
 import threading
 import time
 from pathlib import Path
-from datetime import timedelta
 
-from flask import Flask, jsonify, request, send_from_directory, session
+# The DQN and XGBoost opponent use separate OpenMP runtimes. A single worker
+# avoids native thread-runtime crashes when a process uses both model stacks.
+os.environ.setdefault('OMP_NUM_THREADS', '1')
 
-from engine.bots import DIFFICULTIES
-from engine.game import GameError, Table
+from dotenv import load_dotenv
+from flask import Flask, g, jsonify, redirect, request, send_from_directory, session, url_for
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / 'backend' / '.env')
+from backend.auth_routes import get_user, register_auth, require_auth, require_csrf  # noqa: E402
+
 from leaderboard_store import LeaderboardStore
 
+from engine.bots import DIFFICULTIES
+from engine.game import HUMAN_SEAT, GameError, Table
+from engine.opponent_models import OPPONENT_MODELS, list_models
+
 STATIC_DIR = Path(__file__).parent / 'static'
+CARD_ASSET_DIR = ROOT_DIR / 'Assets' / 'Cards'
 CHAT_BUILD_DIR = Path(__file__).resolve().parents[1] / 'client' / 'dist'
+ADVISOR_CHECKPOINT = Path(__file__).parent / 'dqn_model_surya' / 'checkpoints' / 'pokerpilot_dqn.pt'
 MAX_MATCHES = 500
 IDLE_SECONDS = 6 * 60 * 60
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
-store = LeaderboardStore(os.environ.get('POKERPILOT_DB', str(Path(__file__).parent / 'instance' / 'leaderboard.sqlite3')))
-app.config['LEADERBOARD_STORE'] = store
-app.secret_key = os.environ.get('POKERPILOT_SECRET') or store.session_secret()
-app.config.update(PERMANENT_SESSION_LIFETIME=timedelta(days=365),
-                  SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE='Lax')
+app.secret_key = os.environ.get('POKERPILOT_SECRET') or secrets.token_hex(32)
+app.config['SESSION_COOKIE_NAME'] = 'pokerpilot_singleplayer_session'
+register_auth(app)
+app.config['LEADERBOARD_STORE'] = LeaderboardStore()
 
 matches: dict[str, tuple[Table, float]] = {}
 matches_lock = threading.Lock()
 match_chat_rooms: dict[str, str] = {}
 
 
-def player_profile():
-    database = app.config['LEADERBOARD_STORE']
-    profile = database.profile(session.get('player_id'))
-    if profile is None:
-        profile = database.create_player()
-        session['player_id'] = profile['id']
-    session.permanent = True
-    return profile
+class LeaderboardUnavailable(Exception):
+    pass
 
 
 def persist_results(match):
-    app.config['LEADERBOARD_STORE'].save_rounds(
-        match.player_id, match.leaderboard.game_id, match.settled_rounds)
+    if not match.pending_round_results:
+        return
+    try:
+        app.config['LEADERBOARD_STORE'].save_rounds(
+            match.player_id, match.leaderboard_game_id, match.pending_round_results)
+    except Exception as error:
+        # Keep the pending results for a retry via GET /api/state.
+        app.logger.error('Leaderboard save failed (%s).', type(error).__name__)
+        raise LeaderboardUnavailable() from error
+    match.pending_round_results.clear()
 
 
-def match_response(match, frames=True):
-    persist_results(match)
-    response = match.response() if frames else {'frames': [], 'view': match.view()}
-    response['global_leaderboard'] = app.config['LEADERBOARD_STORE'].standings(match.player_id)
-    return jsonify(response)
-
-
-@app.route('/api/profile', methods=['GET', 'POST'])
-def profile_endpoint():
-    profile = player_profile()
-    if request.method == 'POST':
-        payload = request.get_json(silent=True) or {}
-        try:
-            profile = app.config['LEADERBOARD_STORE'].rename_player(profile['id'], payload.get('name'))
-        except ValueError as error:
-            raise GameError(str(error)) from error
-    return jsonify(profile)
+@app.errorhandler(LeaderboardUnavailable)
+def leaderboard_unavailable(error):
+    return jsonify({'error': 'Leaderboard storage is unavailable. Reload to retry saving.'}), 503
 
 
 @app.get('/api/leaderboard')
-def global_leaderboard():
-    return jsonify(app.config['LEADERBOARD_STORE'].standings(session.get('player_id')))
+@require_auth
+def leaderboard():
+    try:
+        return jsonify(app.config['LEADERBOARD_STORE'].standings(str(g.auth_user['id'])))
+    except Exception as error:
+        app.logger.error('Leaderboard read failed (%s).', type(error).__name__)
+        raise LeaderboardUnavailable() from error
+
+
+def gemini_explanation(view: dict, action: str, label: str) -> str:
+    """Turn the numerical poker recommendation into a concise plain-language explanation."""
+    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not api_key:
+        return f"The advisor recommends {label.lower()}. Review your position and the betting action before choosing."
+
+    try:
+        from google import genai
+
+        prompt = f"""
+You are a poker coach helping a beginner. Explain the recommended action in plain English.
+Use 2-4 short sentences. Do not use equations, percentages, mathematical notation, or DQN/Q-values.
+Mention the most important table factors naturally, but do not claim certainty about hidden cards.
+Recommended action: {label}
+Table state (JSON):
+{json.dumps(view, ensure_ascii=False)[:6000]}
+"""
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash'),
+            contents=prompt,
+        )
+        text = getattr(response, 'text', None)
+        return text.strip() if text and text.strip() else f"The advisor recommends {label.lower()}."
+    except Exception:
+        app.logger.exception('Gemini explanation generation failed.')
+        return f"The advisor recommends {label.lower()}. Review your position and the betting action before choosing."
 
 
 def prune() -> None:
@@ -102,15 +138,11 @@ def current_match() -> Table:
         if entry is None:
             raise GameError('No game in progress. Pick a difficulty to start.')
 
+        if entry[0].player_id != str(g.auth_user['id']):
+            raise GameError('This game belongs to another account.')
         matches[match_id] = (entry[0], time.time())
 
     return entry[0]
-
-
-@app.errorhandler(sqlite3.Error)
-def handle_database_error(error):
-    app.logger.error('Could not save or read leaderboard results: %s', error)
-    return jsonify({'error': 'Leaderboard storage is temporarily unavailable. Please retry.'}), 503
 
 
 @app.errorhandler(GameError)
@@ -120,17 +152,23 @@ def handle_game_error(error: GameError):
 
 @app.get('/')
 def index():
+    try:
+        if get_user() is None:
+            return redirect(url_for('pokerpilot_auth.auth_page', next='/'))
+    except Exception:
+        app.logger.exception('Unable to check the account session.')
+        return jsonify({'detail': 'Authentication storage is unavailable.'}), 503
     return send_from_directory(STATIC_DIR, 'index.html')
 
 
-@app.get('/leaderboard')
-@app.get('/leaderboard/')
-def leaderboard_page():
-    return send_from_directory(STATIC_DIR, 'leaderboard.html')
+@app.get('/cards/deck.svg')
+def card_deck_asset():
+    return send_from_directory(CARD_ASSET_DIR, 'deck.svg', mimetype='image/svg+xml')
 
 
 @app.get('/chat')
 @app.get('/chat/')
+@require_auth
 def chat_index():
     return send_from_directory(CHAT_BUILD_DIR, 'index.html')
 
@@ -141,6 +179,7 @@ def chat_asset(filename: str):
 
 
 @app.get('/api/chat-room')
+@require_auth
 def chat_room():
     match_id = session.get('match_id')
 
@@ -158,38 +197,57 @@ def chat_room():
     return jsonify({'room': room_id})
 
 
+@app.get('/api/models')
+@require_auth
+def models():
+    """AI models the player can pick for the opponents, and which are ready."""
+
+    return jsonify({'models': list_models()})
+
+
 @app.post('/api/new')
+@require_auth
+@require_csrf
 def new_match():
     payload = request.get_json(silent=True) or {}
     difficulty = payload.get('difficulty')
+    model = payload.get('model', 'rules')
 
     if difficulty not in DIFFICULTIES:
         raise GameError(f'Difficulty must be one of: {", ".join(DIFFICULTIES)}.')
 
-    profile = player_profile()
-    match = Table(difficulty)
-    match.player_id = profile['id']
+    if model not in OPPONENT_MODELS:
+        raise GameError(f'AI model must be one of: {", ".join(OPPONENT_MODELS)}.')
+
+    previous = matches.get(session.get('match_id'))
+    if previous is not None:
+        with previous[0].lock:
+            persist_results(previous[0])
+    try:
+        app.config['LEADERBOARD_STORE'].ensure_player(
+            str(g.auth_user['id']), g.auth_user['username'])
+    except Exception as error:
+        app.logger.error('Leaderboard profile failed (%s).', type(error).__name__)
+        raise LeaderboardUnavailable() from error
+    match = Table(difficulty, model=model)
     match_id = secrets.token_urlsafe(16)
+    match.player_id = str(g.auth_user['id'])
+    match.leaderboard_game_id = match_id
 
     with matches_lock:
         prune()
         matches[match_id] = (match, time.time())
         match_chat_rooms[match_id] = secrets.token_urlsafe(24)
 
-    # A replacement game closes the previous board before starting fresh.
-    previous_id = session.get('match_id')
-    previous = matches.get(previous_id)
-    if previous is not None:
-        with previous[0].lock:
-            persist_results(previous[0])
-            previous[0].finish_session()
     session['match_id'] = match_id
 
     with match.lock:
-        return match_response(match)
+        persist_results(match)
+        return jsonify(match.response())
 
 
 @app.get('/api/state')
+@require_auth
 def state():
     if session.get('match_id') not in matches:
         return jsonify(None)  # no match yet; the client stays in the lobby
@@ -197,10 +255,70 @@ def state():
     match = current_match()
 
     with match.lock:
-        return match_response(match, frames=False)
+        persist_results(match)
+        return jsonify({'frames': [], 'view': match.view()})
+
+
+@app.post('/api/advice')
+@require_auth
+@require_csrf
+def advice():
+    match = current_match()
+
+    with match.lock:
+        if match.actor_seat != HUMAN_SEAT:
+            raise GameError('The AI advisor is available only on your turn.')
+        if not ADVISOR_CHECKPOINT.is_file():
+            return jsonify({
+                'error': 'No trained DQN checkpoint is installed. Train the agent first.',
+            }), 503
+
+        try:
+            from dqn_model_surya.env import (
+                ACTION_NAMES,
+                action_to_engine_action,
+                legal_action_mask,
+                observation_from_table,
+            )
+            from dqn_model_surya.model import choose_greedy_action, load_policy
+        except ImportError:
+            app.logger.exception('PyTorch or the DQN advisor package is unavailable.')
+            return jsonify({'error': 'The DQN advisor dependencies are not installed.'}), 503
+
+        network, metadata = load_policy(
+            str(ADVISOR_CHECKPOINT),
+            ADVISOR_CHECKPOINT.stat().st_mtime_ns,
+        )
+        state_vector = observation_from_table(match)
+        if (
+                metadata.get('state_size') != len(state_vector)
+                or metadata.get('action_count') != len(ACTION_NAMES)
+                or metadata.get('action_names') != list(ACTION_NAMES)
+        ):
+            raise RuntimeError('The trained DQN checkpoint uses incompatible state/actions.')
+        mask = legal_action_mask(match)
+        chosen, q_values = choose_greedy_action(network, state_vector, mask)
+        action, amount = action_to_engine_action(match, chosen)
+        if action == 'fold':
+            label = 'Fold'
+        elif action == 'check_call':
+            label = 'Check / Call'
+        else:
+            label = f'Raise to ${amount / 100:,.2f}'
+
+        explanation = gemini_explanation(match.view(), action, label)
+        return jsonify({
+            'action': action,
+            'amount': amount,
+            'label': label,
+            'q_value_bb': q_values[chosen],
+            'explanation': explanation,
+        })
 
 
 @app.post('/api/action')
+@require_auth
+@require_csrf
 def action():
     payload = request.get_json(silent=True) or {}
     kind = payload.get('action')
@@ -222,26 +340,22 @@ def action():
     with match.lock:
         match.human_action(kind, amount)
 
-        return match_response(match)
-
-
-@app.post('/api/quit')
-def quit_match():
-    match = current_match()
-    with match.lock:
         persist_results(match)
-        match.finish_session()
-        return jsonify({'leaderboard': match.leaderboard.snapshot()})
+        return jsonify(match.response())
 
 
 @app.post('/api/next')
+@require_auth
+@require_csrf
 def next_hand():
     match = current_match()
 
     with match.lock:
+        persist_results(match)
         match.next_hand()
 
-        return match_response(match)
+        persist_results(match)
+        return jsonify(match.response())
 
 
 if __name__ == '__main__':

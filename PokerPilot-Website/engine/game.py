@@ -4,7 +4,6 @@ pokerkit. All amounts are integer cents."""
 from __future__ import annotations
 
 import random
-import secrets
 import threading
 from dataclasses import dataclass, field
 
@@ -20,8 +19,6 @@ from pokerkit import (
     StandardHighHand,
     State,
 )
-
-from .leaderboard import PokerPilotLeaderboard
 
 from .bots import CHARACTERS, DIFFICULTIES, Bot, BotView, OpponentInfo, create_bot
 
@@ -111,25 +108,31 @@ class Seat:
 
 
 class Table:
-    def __init__(self, difficulty: str, seed: int | None = None) -> None:
+    def __init__(self, difficulty: str, seed: int | None = None, model: str = 'rules') -> None:
+        # Imported here because opponent_models imports this module.
+        from .opponent_models import OPPONENT_MODELS, ModelUnavailable, create_opponent
+
         if difficulty not in DIFFICULTIES:
             raise GameError(f'Unknown difficulty: {difficulty!r}')
+
+        if model not in OPPONENT_MODELS:
+            raise GameError(f'Unknown AI model: {model!r}')
 
         self.lock = threading.Lock()
         self.rng = random.Random(seed)
         self.difficulty = difficulty
+        self.model = model
         self.seats = [Seat('You', None, 'teal', None)]
 
         for character in CHARACTERS:
-            bot = create_bot(difficulty, character, random.Random(self.rng.random()))
+            try:
+                bot = create_opponent(model, difficulty, character, random.Random(self.rng.random()))
+            except ModelUnavailable as error:
+                raise GameError(str(error)) from error
+
             self.seats.append(Seat(character.name, character.avatar, character.color, bot))
 
-        self.leaderboard = PokerPilotLeaderboard()
-        self.leaderboard.start_game(secrets.token_urlsafe(16))
-        for i, seat in enumerate(self.seats):
-            self.leaderboard.add_player(str(i), seat.name, seat.stack / 100)
-        self.closed = False
-        self.settled_rounds: list[dict] = []
+        self.pending_round_results: list[dict] = []
         self.hand_number = 0
         self.button: int | None = None
         self.state: State | None = None
@@ -179,8 +182,6 @@ class Table:
         raise GameError('No players left.')
 
     def start_hand(self) -> None:
-        if self.closed:
-            raise GameError('The game is finished. Start a new game.')
         if self.state is not None:
             if not self.hand_over:
                 raise GameError('The current hand is still in progress.')
@@ -227,6 +228,9 @@ class Table:
         self.preflop_raiser: int | None = None
         self.raises_this_street = 0
         self.last_action: dict[int, str] = {}
+        # Public action history by street, used by the ML opponents:
+        # street_actions[street] = [(seat, 'check'|'call'|'bet'|'raise'|'fold'), ...]
+        self.street_actions: list[list[tuple[int, str]]] = [[]]
         self.vpip_seen: set[int] = set()
         self.pfr_seen: set[int] = set()
 
@@ -311,6 +315,7 @@ class Table:
                 self.log.append(f'--- {name}: {cards} ---')
                 self.raises_this_street = 0
                 self.last_action = {}
+                self.street_actions.append([])
             elif isinstance(op, HoleCardsShowingOrMucking):
                 seat = self.order[op.player_index]
                 name = self.seats[seat].name
@@ -337,19 +342,6 @@ class Table:
 
         for i, seat in enumerate(self.order):
             self.seats[seat].stack = state.stacks[i]
-
-        # Publish only fully settled balances; the engine uses cents, the
-        # leaderboard uses dollars. Never rank transient bets or unawarded pots.
-        participants = [str(seat) for seat in self.order]
-        self.leaderboard.hand_finished(
-            {str(seat): self.seats[seat].stack / 100 for seat in self.order},
-            participants,
-        )
-        for seat in self.order:
-            if self.seats[seat].stack == 0:
-                self.leaderboard.player_quit(str(seat))
-        if self.game_over:
-            self.leaderboard.finish_game()
 
         board = self.board
         showdown = len(self.revealed) >= 2
@@ -378,8 +370,6 @@ class Table:
         winners.sort(key=lambda w: -w['net'])
         human_net = state.payoffs[self.index_of(HUMAN_SEAT)] if HUMAN_SEAT in self.order else 0
 
-        self.settled_rounds.append({'round_number': self.hand_number, 'net_cents': int(human_net)})
-
         if not winners:
             headline = 'Split pot.'
         elif winners[0]['seat'] == HUMAN_SEAT:
@@ -389,6 +379,9 @@ class Table:
             headline = f'{top["name"]} wins {money(top["net"])}'
             headline += f' with {top["hand"]}.' if top['hand'] else '.'
 
+        self.pending_round_results.append({
+            'round_number': self.hand_number, 'net_cents': int(human_net),
+        })
         self.result = {
             'headline': headline,
             'human_net': human_net,
@@ -410,6 +403,15 @@ class Table:
         stats = self.seats[seat].stats
         facing_bet = state.checking_or_calling_amount > 0
         preflop = state.street_index == 0
+
+        if action == 'fold':
+            kind = 'fold'
+        elif action == 'check_call':
+            kind = 'call' if facing_bet else 'check'
+        else:
+            kind = 'bet' if max(state.bets) == 0 else 'raise'
+
+        self.street_actions[-1].append((seat, kind))
 
         # Fold-to-bet only counts after the flop; preflop folds are just
         # unplayable hands.
@@ -534,7 +536,13 @@ class Table:
     def run_bots(self) -> None:
         while (seat := self.actor_seat) is not None and seat != HUMAN_SEAT:
             bot = self.seats[seat].bot
-            action, amount = bot.decide(self.bot_view(seat))
+
+            # ML opponents need the whole table (positions, action history);
+            # the classic bots only get the BotView.
+            if hasattr(bot, 'decide_at_table'):
+                action, amount = bot.decide_at_table(self, seat)
+            else:
+                action, amount = bot.decide(self.bot_view(seat))
             state = self.state
 
             # Never fold for free, and fall back to calling on bad sizes.
@@ -551,8 +559,6 @@ class Table:
     # ---------------------------------------------------------- public API
 
     def human_action(self, action: str, amount: int | None = None) -> None:
-        if self.closed:
-            raise GameError('The game is finished. Start a new game.')
         if self.actor_seat != HUMAN_SEAT:
             raise GameError('It is not your turn.')
 
@@ -612,21 +618,14 @@ class Table:
             'last_action': self.last_action.get(seat),
         }
 
-    def finish_session(self) -> None:
-        """Freeze the board at the last settled hand when leaving the table."""
-        if self.leaderboard.status == 'active':
-            self.leaderboard.finish_game()
-        self.closed = True
-
     def view(self) -> dict:
         state = self.state
         street = state.street_index
         actor = self.actor_seat
 
         return {
-            'leaderboard': self.leaderboard.snapshot(),
-            'session_finished': self.closed,
             'difficulty': self.difficulty,
+            'model': self.model,
             'hand_number': self.hand_number,
             'blinds': [SMALL_BLIND, BIG_BLIND],
             'seats': [self.seat_view(seat) for seat in range(SEAT_COUNT)],

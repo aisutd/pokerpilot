@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800;900&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/lobby.css">
   <link rel="stylesheet" href="/static/loading.css">
-  <link rel="stylesheet" href="/static/style.css?v=leaderboard-no-name">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
@@ -44,6 +44,7 @@
       </div>
       <h1 class="wordmark"><span class="poker">Poker</span> <span class="pilot">Pilot</span></h1>
       <p class="tagline">LEARN <i>&middot;</i> PLAY <i>&middot;</i> IMPROVE</p>
+      <div class="lobby-account"><span id="account-name"></span><button id="logout" type="button">Log out</button></div>
     </header>
 
     <div class="lobby-table" aria-hidden="true">
@@ -71,8 +72,14 @@
       <div class="cardbox right"></div>
     </div>
 
-    <nav class="dashboard-nav" aria-label="Dashboard navigation"><a class="ghost" href="/leaderboard">View leaderboards &rarr;</a></nav>
-
+    <div class="model-picker" role="radiogroup" aria-labelledby="model-picker-label">
+      <span id="model-picker-label" class="model-picker-label">OPPONENT AI</span>
+      <div id="model-options" class="model-options">
+        <!-- Filled from /api/models by app.js; this is the fallback. -->
+        <button type="button" class="model-option" role="radio" data-model="rules" aria-checked="true">Classic Bots</button>
+      </div>
+      <p id="model-description" class="model-description"></p>
+    </div>
 
     <nav class="modes" aria-label="Choose a difficulty">
       <button class="mode" data-difficulty="easy">
@@ -157,7 +164,6 @@
     </header>
 
     <div class="arena">
-      <div class="play-area">
       <div class="table-area" id="table-area">
         <div class="poker-table">
           <div class="felt-line"></div>
@@ -173,6 +179,11 @@
 
       <div class="controls" id="controls">
         <div class="hand-strength" id="hand-strength"></div>
+
+        <div class="dqn-advisor">
+          <button id="dqn-advice" class="ghost" type="button">Ask AI Advisor</button>
+          <p id="dqn-advice-result" role="status" hidden></p>
+        </div>
 
         <div class="actions" id="actions" hidden>
           <div class="action-row">
@@ -205,17 +216,6 @@
 
         <p id="game-error" class="game-error" hidden></p>
       </div>
-      </div>
-    <aside id="leaderboard" class="leaderboard-panel" aria-label="Leaderboards">
-      <div class="history-head"><h2>Leaderboard</h2></div>
-      <div class="leaderboard-tabs" role="group" aria-label="Leaderboard rankings">
-        <button id="leaderboard-global" type="button" aria-pressed="true">Global</button>
-        <button id="leaderboard-game" type="button" aria-pressed="false">This game</button>
-      </div>
-      <p id="leaderboard-description" class="leaderboard-note">All players, ranked by total net winnings across completed rounds.</p>
-      <p id="global-leaderboard-message" class="leaderboard-note" role="status"></p>
-      <div id="leaderboard-table"></div>
-    </aside>
     </div>
 
     <aside class="history" id="history" hidden>
@@ -232,10 +232,9 @@
     <div class="modal-card">
       <h2 id="game-over-title"></h2>
       <p id="game-over-text"></p>
-      <div id="final-leaderboard"></div>
       <div class="modal-buttons">
         <button id="play-again" class="act next">Play again</button>
-        <button id="to-lobby" class="ghost">Change difficulty</button>
+        <button id="to-lobby" class="ghost">Back to lobby</button>
       </div>
     </div>
   </div>
@@ -250,6 +249,6 @@
     </div>
   </aside>
 
-  <script src="/static/app.js?v=leaderboard-no-name"></script>
+  <script src="/static/app.js"></script>
 </body>
 </html>
