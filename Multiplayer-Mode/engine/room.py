@@ -129,6 +129,7 @@ class Player:
     token: str
     name: str
     color: str
+    account_id: str | int | None = None
     seat: int | None = None
     left: bool = False  # left mid-hand; removed when the hand ends
 
@@ -244,7 +245,7 @@ class Room:
 
         return candidate
 
-    def join(self, name: object) -> str:
+    def join(self, name: object, account_id: str | int | None = None) -> str:
         """Add a player and return their secret token."""
 
         with self.lock:
@@ -255,7 +256,7 @@ class Room:
             used = {p.color for p in self.present()}
             color = next((c for c in HUMAN_COLORS if c not in used), HUMAN_COLORS[len(self.players) % len(HUMAN_COLORS)])
             token = secrets.token_urlsafe(16)
-            player = Player(token, name, color)
+            player = Player(token, name, color, account_id=account_id)
             self.players[token] = player
 
             if self.host is None:

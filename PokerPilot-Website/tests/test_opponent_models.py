@@ -124,20 +124,33 @@ class XGBoostOpponentTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def setUp(self):
         from app import app
+        from backend.auth_routes import auth as auth_storage
+        from unittest.mock import patch
         app.config['TESTING'] = True
         self.client = app.test_client()
+        self.client.set_cookie('pokerpilot_session', 'test-session')
+        self.client.set_cookie('pokerpilot_csrf', 'test-csrf')
+        self.auth_patch = patch.object(auth_storage, 'session_user', return_value={
+            'id': 1, 'username': 'test', 'email': 'test@example.test',
+        })
+        self.auth_patch.start()
+
+    def tearDown(self):
+        self.auth_patch.stop()
 
     def test_models_endpoint(self):
         data = self.client.get('/api/models').get_json()
         self.assertEqual(data['models'][0]['key'], 'mixed')
 
     def test_new_game_with_model(self):
-        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': 'rules'})
+        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': 'rules'},
+                                    headers={'X-CSRF-Token': 'test-csrf'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()['view']['model'], 'rules')
 
     def test_new_game_rejects_bad_model(self):
-        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': 'gpt'})
+        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': 'gpt'},
+                                    headers={'X-CSRF-Token': 'test-csrf'})
         self.assertEqual(response.status_code, 400)
 
     def test_unavailable_model_gives_clear_error(self):
@@ -146,7 +159,8 @@ class ApiTests(unittest.TestCase):
         if not unavailable:
             self.skipTest('every model is available here')
 
-        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': unavailable[0]['key']})
+        response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': unavailable[0]['key']},
+                                    headers={'X-CSRF-Token': 'test-csrf'})
         self.assertEqual(response.status_code, 400)
         self.assertIn('not available', response.get_json()['error'])
 
