@@ -245,6 +245,16 @@ button:focus-visible, input:focus-visible {
   font-weight: 700;
   font-size: clamp(12px, 1.3cqw, 15px);
   white-space: nowrap;
+}
+
+.seat-ai {
+  margin-top: 2px;
+  font-size: clamp(8px, .85cqw, 10px);
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #f1c75b;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 12em;

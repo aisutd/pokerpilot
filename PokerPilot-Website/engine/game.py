@@ -77,6 +77,10 @@ class PlayerStats:
         return (self.vpip + 3) / (self.hands + 10)  # prior of 30 percent
 
     @property
+    def pfr_rate(self) -> float:
+        return (self.pfr + 2) / (self.hands + 10)  # prior of 20 percent
+
+    @property
     def aggression_factor(self) -> float:
         return (self.aggressive + 1) / (self.calls + 1)
 
@@ -108,7 +112,7 @@ class Seat:
 
 
 class Table:
-    def __init__(self, difficulty: str, seed: int | None = None, model: str = 'rules') -> None:
+    def __init__(self, difficulty: str, seed: int | None = None, model: str = 'mixed') -> None:
         # Imported here because opponent_models imports this module.
         from .opponent_models import OPPONENT_MODELS, ModelUnavailable, create_opponent
 
@@ -232,6 +236,8 @@ class Table:
         self.street_actions: list[list[tuple[int, str]]] = [[]]
         self.vpip_seen: set[int] = set()
         self.pfr_seen: set[int] = set()
+        self.mixed_routing: dict[int, dict] = {}
+        self.mixed_recent_action: dict[int, float] = {}
 
         for s in order:
             self.seats[s].stats.hands += 1
@@ -463,6 +469,13 @@ class Table:
             raise GameError(f'Unknown action: {action!r}')
 
         self.track(seat, action)
+        if seat != HUMAN_SEAT and seat in self.mixed_routing:
+            action_signal = {
+                'fold': 0.55,
+                'check_call': 0.70,
+                'raise': 0.10,
+            }[action]
+            self.mixed_recent_action[seat] = action_signal
         self.log.append(self.describe_action(seat, action, amount))
 
         if action == 'fold':
@@ -600,6 +613,7 @@ class Table:
         else:
             status = 'active'
 
+        mixed = self.mixed_routing.get(seat)
         return {
             'name': info.name,
             'avatar': info.avatar,
@@ -612,6 +626,8 @@ class Table:
             'is_button': seat == self.button,
             'stats': info.stats.summary(),
             'last_action': self.last_action.get(seat),
+            'ai_model': mixed['model'] if mixed else None,
+            'passive_score': mixed['score'] if mixed else None,
         }
 
     def view(self) -> dict:

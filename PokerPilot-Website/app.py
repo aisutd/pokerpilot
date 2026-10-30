@@ -143,7 +143,7 @@ def models():
 def new_match():
     payload = request.get_json(silent=True) or {}
     difficulty = payload.get('difficulty')
-    model = payload.get('model', 'rules')
+    model = payload.get('model', 'mixed')
 
     if difficulty not in DIFFICULTIES:
         raise GameError(f'Difficulty must be one of: {", ".join(DIFFICULTIES)}.')

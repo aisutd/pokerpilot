@@ -18,9 +18,6 @@ let seatEls = null;
 let chatRequest = 0;
 let adviceRequest = 0;
 let adviceBusy = false;
-let models = [];             // from /api/models
-let selectedModel = 'rules'; // which AI model the opponents use
-const MODEL_KEY = 'pokerpilot.model';
 
 // ------------------------------------------------------------- helpers
 
@@ -222,12 +219,21 @@ function buildSeats(seats) {
     const name = document.createElement('div');
     name.className = 'seat-name';
     name.textContent = seat.name;
+    if (i !== HUMAN) {
+      const ai = document.createElement('div');
+      ai.className = 'seat-ai';
+      ai.dataset.seat = String(i);
+      who.append(name);
+      who.append(ai);
+    } else {
+      who.append(name);
+    }
     const stack = document.createElement('div');
     stack.className = 'seat-stack';
     const stats = document.createElement('div');
     stats.className = 'seat-stats';
     stats.title = 'Hands played voluntarily % / Preflop raise % / Hands won';
-    who.append(name, stack, stats);
+    who.append(stack, stats);
 
     const dealer = document.createElement('span');
     dealer.className = 'dealer';
@@ -250,7 +256,7 @@ function buildSeats(seats) {
     bet.dataset.pos = pos;
     root.appendChild(bet);
 
-    return { el, stack, stats, dealer, action, cards, bet };
+    return { el, stack, stats, dealer, action, cards, bet, ai: i === HUMAN ? null : el.querySelector('.seat-ai') };
   });
 }
 
@@ -263,6 +269,10 @@ function renderSeats(v, thinkingSeat) {
     parts.stack.textContent = seat.status === 'out' ? 'Out' : money(seat.stack);
     parts.stats.textContent = seat.stats.join(' / ');
     parts.dealer.hidden = !seat.is_button;
+    if (parts.ai) {
+      parts.ai.textContent = seat.ai_model ? `${seat.ai_model}${seat.passive_score !== null ? ` · ${Math.round(seat.passive_score * 100)}%` : ''}` : '';
+      parts.ai.hidden = !seat.ai_model;
+    }
 
     const el = parts.el;
     el.classList.toggle('active', v.to_act === i && !v.hand_over);
@@ -527,67 +537,13 @@ async function send(path, body) {
   }
 }
 
-// ------------------------------------------------------- AI model picker
+// ------------------------------------------------------- automatic mixed AI
 
 function modelLabel(key) {
-  const model = models.find((m) => m.key === key);
-  return model ? model.label : key;
+  return key === 'mixed' ? 'Adaptive AI' : key;
 }
 
-function renderModels() {
-  const box = $('model-options');
-  box.replaceChildren();
-
-  for (const model of models) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'model-option';
-    button.setAttribute('role', 'radio');
-    button.dataset.model = model.key;
-    button.textContent = model.label;
-    button.disabled = !model.available;
-    button.setAttribute('aria-checked', String(model.key === selectedModel));
-    button.title = model.available ? model.description : model.reason;
-
-    if (!model.available) {
-      const lock = document.createElement('span');
-      lock.className = 'lock';
-      lock.setAttribute('aria-hidden', 'true');
-      lock.textContent = '🔒';
-      button.append(lock);
-    }
-
-    button.addEventListener('click', () => selectModel(model.key));
-    box.append(button);
-  }
-
-  const current = models.find((m) => m.key === selectedModel);
-  $('model-description').textContent = current ? current.description : '';
-}
-
-function selectModel(key) {
-  const model = models.find((m) => m.key === key);
-  if (!model || !model.available) return;
-  selectedModel = key;
-  try { localStorage.setItem(MODEL_KEY, key); } catch { /* storage blocked */ }
-  renderModels();
-}
-
-async function loadModels() {
-  try {
-    ({ models } = await api('/api/models'));
-  } catch {
-    models = [{ key: 'rules', label: 'Classic Bots', description: '', available: true }];
-  }
-
-  let saved = null;
-  try { saved = localStorage.getItem(MODEL_KEY); } catch { /* storage blocked */ }
-  const usable = (key) => models.some((m) => m.key === key && m.available);
-  selectedModel = usable(saved) ? saved : 'rules';
-  renderModels();
-}
-
-async function startGame(difficulty, model = selectedModel) {
+async function startGame(difficulty, model = 'mixed') {
   if (busy) return;
   clearAdvice();
   disconnectChat();
@@ -746,11 +702,11 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'n' && view && view.hand_over && !view.game_over && !busy) send('/api/next', {});
 });
 
-loadModels();
-
-// Resume a game in progress after a page reload.
-api('/api/state')
-  .then((data) => {
+async function initializeApp() {
+  try {
+    const { user } = await api('/api/auth/me');
+    $('account-name').textContent = user.username;
+    const data = await api('/api/state');
     if (data && data.view) {
       showScreen('game');
       render(data.view);

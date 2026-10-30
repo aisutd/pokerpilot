@@ -11,8 +11,20 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from engine.bots import Bot, Personality, SKILLS
-from engine.game import BIG_BLIND, HUMAN_SEAT, SEAT_COUNT, STARTING_STACK, Table
+try:
+    from engine.bots import Bot, Personality, SKILLS
+    from engine.game import BIG_BLIND, HUMAN_SEAT, SEAT_COUNT, STARTING_STACK, Table
+except ImportError:
+    # Multiplayer loads a separate engine package with the same module name.
+    # These constants and type placeholders cover DQN inference without
+    # importing the single-player game implementation.
+    BIG_BLIND = 200
+    HUMAN_SEAT = 0
+    SEAT_COUNT = 6
+    STARTING_STACK = 20_000
+    Table = object
+
+    from engine.bots import Personality
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -105,8 +117,11 @@ def load_style_distribution(
 def _raise_limits(table: Table, seat: int) -> dict | None:
     """Legal action info for ``seat`` (the human's or a bot's turn)."""
 
-    if seat == HUMAN_SEAT:
-        return table.legal_actions()
+    if hasattr(table, 'legal_actions'):
+        try:
+            return table.legal_actions(seat)
+        except TypeError:
+            return table.legal_actions()
     if table.actor_seat != seat:
         return None
 

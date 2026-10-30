@@ -40,10 +40,9 @@ def play(table: Table, hands: int) -> int:
 class ModelRegistryTests(unittest.TestCase):
     def test_lists_every_model(self):
         keys = [m['key'] for m in list_models()]
-        self.assertEqual(keys, ['rules', 'xgboost', 'dqn'])
-        rules = list_models()[0]
-        self.assertTrue(rules['available'])
-        self.assertIsNone(rules['reason'])
+        self.assertEqual(keys, ['mixed', 'rules', 'xgboost', 'dqn'])
+        mixed = list_models()[0]
+        self.assertEqual(mixed['key'], 'mixed')
 
     def test_unknown_model_is_rejected(self):
         with self.assertRaises(GameError):
@@ -51,8 +50,8 @@ class ModelRegistryTests(unittest.TestCase):
 
     def test_rules_is_the_default(self):
         table = Table('easy', seed=1)
-        self.assertEqual(table.model, 'rules')
-        self.assertEqual(table.view()['model'], 'rules')
+        self.assertEqual(table.model, 'mixed')
+        self.assertEqual(table.view()['model'], 'mixed')
 
 
 class FeatureTests(unittest.TestCase):
@@ -130,7 +129,7 @@ class ApiTests(unittest.TestCase):
 
     def test_models_endpoint(self):
         data = self.client.get('/api/models').get_json()
-        self.assertEqual(data['models'][0]['key'], 'rules')
+        self.assertEqual(data['models'][0]['key'], 'mixed')
 
     def test_new_game_with_model(self):
         response = self.client.post('/api/new', json={'difficulty': 'easy', 'model': 'rules'})

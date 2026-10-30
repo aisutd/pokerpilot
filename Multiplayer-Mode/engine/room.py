@@ -17,7 +17,9 @@ import secrets
 import threading
 import time
 import traceback
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from pokerkit import (
@@ -140,6 +142,10 @@ class Seat:
     token: str | None = None  # the player sitting here; None for AI players
     stack: int = STARTING_STACK
     stats: PlayerStats = field(default_factory=PlayerStats)
+    portrait: int | None = None
+    ai_model: str | None = None
+    passive_score: float = 0.0
+    mixed_recent_action: float | None = None
 
 
 class Room:
@@ -879,8 +885,45 @@ class Room:
             else:
                 self.postflop_raises[seat] += 1
 
+    DQN_PASSIVE_THRESHOLD = 0.55
+    MIN_DQN_STAT_HANDS = 5
+    NEW_ACTION_WEIGHT = 0.10
+
+    def passive_profile_score(self, seat: int, recent_action: float | None = None) -> float:
+        stats = self.seats[seat].stats
+        vpip = stats.vpip_rate
+        pfr = stats.pfr / (stats.hands + 10) if stats.hands else 0.0
+        ratio = pfr / vpip if vpip > 0 else 0.0
+        ratio_score = 1.0 if ratio <= 0.65 else 0.0
+        aggression_score = 1.0 if stats.aggression_factor <= 0.75 else 0.0
+        baseline = 0.65 * ratio_score + 0.35 * aggression_score
+
+        if stats.hands < self.MIN_DQN_STAT_HANDS:
+            score = 0.0
+        elif recent_action is None:
+            score = baseline
+        else:
+            score = 0.90 * baseline + 0.10 * recent_action
+        return score
+
+    def route_player_model(self, seat: int, action: str | None = None) -> str:
+        if self.seats[seat] is None:
+            return 'XGBoost'
+        recent_action = self.seats[seat].mixed_recent_action
+        score = self.passive_profile_score(seat, recent_action)
+        if action is not None:
+            action_signal = {'fold': 0.55, 'check_call': 0.70, 'raise': 0.10}[action]
+            self.seats[seat].mixed_recent_action = action_signal
+            score = self.passive_profile_score(seat, action_signal)
+
+        model = 'DQN' if score >= self.DQN_PASSIVE_THRESHOLD else 'XGBoost'
+        self.seats[seat].ai_model = model
+        self.seats[seat].passive_score = round(score, 3)
+        return model
+
     def apply(self, seat: int, action: str, amount: int | None = None) -> None:
         state = self.state
+        self.route_player_model(seat)
 
         if action == 'fold':
             if state.checking_or_calling_amount == 0:
@@ -899,6 +942,7 @@ class Room:
 
         self.track(seat, action)
         self.log.append(self.describe_action(seat, action, amount))
+        self.route_player_model(seat, action)
 
         if action == 'fold':
             state.fold()
@@ -994,11 +1038,92 @@ class Room:
             was_preflop_raiser=self.preflop_raiser == seat,
         )
 
+    def dqn_decision(self, seat: int) -> tuple[str, int | None]:
+        repo_root = Path(__file__).resolve().parents[2]
+        website_dir = repo_root / 'PokerPilot-Website'
+        if str(website_dir) not in sys.path:
+            sys.path.insert(0, str(website_dir))
+        checkpoint = website_dir / 'dqn_model_surya' / 'checkpoints' / 'pokerpilot_dqn.pt'
+        if not checkpoint.is_file():
+            raise RuntimeError('No DQN checkpoint installed.')
+
+        from dqn_model_surya.env import (
+            ACTION_NAMES,
+            action_to_engine_action,
+            legal_action_mask,
+            observation_from_table,
+        )
+        from dqn_model_surya.model import choose_greedy_action, load_policy
+
+        observation = observation_from_table(self, seat)
+        mask = legal_action_mask(self, seat)
+        network, metadata = load_policy(str(checkpoint), checkpoint.stat().st_mtime_ns)
+        if metadata.get('state_size') != len(observation) or metadata.get('action_names') != list(ACTION_NAMES):
+            raise RuntimeError('The trained DQN checkpoint uses incompatible state/actions.')
+        chosen, _ = choose_greedy_action(network, observation, mask)
+        return action_to_engine_action(self, chosen, seat)
+
+    def xgboost_decision(self, seat: int) -> tuple[str, int | None]:
+        repo_root = Path(__file__).resolve().parents[2]
+        model_dir = repo_root / 'pokerpilot_model'
+        website_dir = repo_root / 'PokerPilot-Website'
+        if str(model_dir) not in sys.path:
+            sys.path.insert(0, str(model_dir))
+        if str(website_dir) not in sys.path:
+            sys.path.insert(0, str(website_dir))
+
+        from engine.opponent_models import load_xgboost
+
+        view = self.bot_view(seat)
+        state = self.state
+        facing_bet = view.to_call > 0
+        raw_state = {
+            'facing_bet': int(facing_bet),
+            'street_idx': view.street,
+            'street': STREET_NAMES[min(view.street, 3)],
+            'num_players': len(self.order),
+            'players_in_hand': sum(state.statuses[i] for i in range(len(self.order))),
+            'players_yet_to_act': view.players_behind,
+            'pot_bb': view.pot / BIG_BLIND,
+            'to_call_bb': view.to_call / BIG_BLIND,
+            'pot_odds': view.to_call / (view.pot + view.to_call) if view.pot + view.to_call else 0.0,
+            'stack_bb': view.my_stack / BIG_BLIND,
+            'effective_stack_bb': view.my_stack / BIG_BLIND,
+            'raises_this_street': self.raises_this_street,
+            'equity_vs_random': 0.5,
+        }
+        predict = load_xgboost()
+        probs, size = predict(raw_state)
+
+        if facing_bet:
+            allowed = ('fold', 'call', 'raise')
+        else:
+            allowed = ('check', 'bet', 'raise')
+        action = max((a for a in allowed if a in probs), key=lambda a: probs[a])
+
+        if action == 'fold':
+            return 'fold', None
+        if action in ('check', 'call'):
+            return 'check_call', None
+        if view.min_raise_to is None:
+            return 'check_call', None
+        amount = view.my_bet + min(3.0, max(0.25, size)) * view.pot
+        amount = round(amount / 50) * 50
+        amount = max(view.min_raise_to, min(view.max_raise_to, int(amount)))
+        return 'raise', amount
+
     def bot_turn(self) -> None:
         seat = self.actor_seat
 
         if seat is not None and self.seats[seat].bot is not None:
-            action, amount = self.seats[seat].bot.decide(self.bot_view(seat))
+            model = self.route_player_model(seat)
+            try:
+                if model == 'DQN':
+                    action, amount = self.dqn_decision(seat)
+                else:
+                    action, amount = self.xgboost_decision(seat)
+            except Exception:
+                action, amount = self.seats[seat].bot.decide(self.bot_view(seat))
             state = self.state
 
             # Never fold for free, and fall back to calling on bad sizes.
@@ -1016,7 +1141,23 @@ class Room:
 
     # --------------------------------------------------------------- views
 
-    def legal_actions(self, seat: int) -> dict | None:
+    def view(self) -> dict:
+        """Compatibility view for shared DQN inference helpers."""
+        return {
+            'seats': [
+                self.seat_view(seat, None) if self.seats[seat] is not None else {
+                    'status': 'out',
+                    'stack': 0,
+                }
+                for seat in range(len(self.seats))
+            ],
+        }
+
+    def legal_actions(self, seat: int | None = None) -> dict | None:
+        if seat is None:
+            seat = self.actor_seat
+        if seat is None:
+            return None
         if self.actor_seat != seat:
             return None
 
@@ -1075,6 +1216,8 @@ class Room:
             'is_button': seat == self.button and self.state is not None,
             'stats': info.stats.summary(),
             'last_action': self.last_action.get(seat),
+            'ai_model': info.ai_model,
+            'passive_score': info.passive_score,
             'away': info.bot is None and (player is None or player.left or not self.connected(info.token)),
         }
 
