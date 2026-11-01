@@ -1,0 +1,25 @@
+from pathlib import Path
+
+import pytest
+
+try:
+    from xgboost import XGBClassifier  # noqa: F401
+except Exception as exc:
+    pytest.skip(f"XGBoost runtime unavailable: {exc}", allow_module_level=True)
+
+from pokerpilot_model.siri.data import feature_columns, feature_frame, load_splits
+from pokerpilot_model.siri.model import build_pipeline
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_small_classifier_fit_and_predict():
+    frames = load_splits(ROOT / "pokerpilot_model/data")
+    columns = feature_columns(ROOT / "pokerpilot_model/data/poker_feature_dictionary.csv")
+    sample = frames["train"].groupby("target_action", group_keys=False).head(8)
+    model = build_pipeline(columns, n_estimators=3, max_depth=2, n_jobs=1)
+    labels = sorted(sample.target_action.unique())
+    label_to_id = {label: index for index, label in enumerate(labels)}
+    model.fit(feature_frame(sample, columns), sample.target_action.map(label_to_id))
+    prediction = model.predict(feature_frame(frames["val"].head(12), columns))
+    assert len(prediction) == 12
