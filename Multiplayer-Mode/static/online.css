@@ -229,7 +229,7 @@
 .avatar.initial { color: #fff; }
 .seat.empty .seat-stats { visibility: hidden; }
 
-.seat-action.is-away, .seat-action.is-next { background: #4a3a3c; color: #e0d2cf; }
+.seat-action.is-away, .seat-action.is-next { --face: #4a3a3c; --face-hi: #65524f; --face-lo: #30252a; color: #e0d2cf; }
 
 /* turn clock: a bar along the top of the acting player's plate */
 .seat .clock {
@@ -256,6 +256,8 @@
 .ring .plate::before { left: 24%; }
 .ring .seat-cards { --card-w: 2.7cqw; }
 .ring .seat-cards.up { --card-w: 3.1cqw; }
+/* the table buttons sit above the top right plate, so its hand goes below */
+.ring .seat[data-pos="top-right"] .seat-cards { bottom: auto; top: 100%; transform: translate(-50%, 1.2cqw); }
 
 .ring .seat[data-pos="bottom-left"] { left: 9.2%; top: 60%; }
 .ring .seat[data-pos="left"] { left: 9.2%; top: 37%; }
@@ -321,12 +323,10 @@
   z-index: 30;
   right: 18px;
   bottom: 18px;
+  --px: 3px;
+  --face: #1f0508;
   width: min(380px, calc(100vw - 24px));
   overflow: hidden;
-  border: 2px solid rgba(242, 180, 51, .55);
-  border-radius: 8px;
-  background: #1f0508;
-  box-shadow: 0 0 0 2px #1c0407, 0 18px 48px rgba(0, 0, 0, .5);
 }
 
 .chat-widget-header {
@@ -336,8 +336,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 7px 10px 7px 15px;
-  border-bottom: 1px solid rgba(242, 180, 51, .4);
-  background: linear-gradient(120deg, #4a0e15, #2b070b);
+  border-bottom: 3px solid var(--gold);
+  background: #3b0b11;
   color: var(--text);
   font: 400 1rem var(--pixel);
   letter-spacing: .03em;
@@ -348,9 +348,17 @@
 
 .chat-widget-header:active { cursor: grabbing; }
 
-/* at a wide table it opens top right, clear of the chat button */
+/* at a wide table it opens top right, under the buttons (the stage is
+   centred and keeps the table art's 1024 x 559 shape, as in style.css) */
 @media (min-width: 861px), (orientation: landscape) {
-  .chat-widget.at-table { top: 12px; bottom: auto; }
+  .chat-widget.at-table {
+    --stage-w: min(100vw, calc(100dvh * 1024 / 559));
+    --chat-top: calc((100dvh - var(--stage-w) * 559 / 1024) / 2 + var(--stage-w) * .064);
+    top: var(--chat-top);
+    right: calc((100vw - var(--stage-w)) / 2 + var(--stage-w) * .012);
+    bottom: auto;
+  }
+  .chat-widget.at-table .chat-widget-content { height: min(470px, calc(100dvh - var(--chat-top) - 60px)); }
 }
 
 .chat-player-names {
@@ -371,9 +379,10 @@
   height: 30px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(242, 180, 51, .45);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, .25);
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 0, 0, .3);
+  box-shadow: 0 -2px 0 rgba(242, 180, 51, .6), 0 2px 0 rgba(242, 180, 51, .6), -2px 0 0 rgba(242, 180, 51, .6), 2px 0 0 rgba(242, 180, 51, .6);
   color: var(--gold-light);
   font-size: 1.1rem;
   line-height: 1;
@@ -390,7 +399,7 @@
   width: 100%;
   height: 100%;
   border: 0;
-  background: #f0f2f5;
+  background: #1f0508;
 }
 
 @media (max-width: 520px) {

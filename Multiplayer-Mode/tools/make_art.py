@@ -2,7 +2,11 @@
 chip_table_images) into the web assets in static/art.
 
 Needs Pillow (pip install pillow), which the site itself does not use.
-usage:  python tools/make_art.py <folder holding Assets/ and chip_table_images/> static/art
+usage:  python tools/make_art.py <folder holding Assets/ and chip_table_images/> static/art [table image]
+
+The optional table image replaces the table from chip_table_images. It must
+have the same layout (table art is 1024 x 559 or the same shape, larger):
+the page places seats on it by percentage.
 """
 
 import sys
@@ -12,6 +16,7 @@ from pathlib import Path
 from PIL import Image
 
 src, out = Path(sys.argv[1]), Path(sys.argv[2])
+table_image = Path(sys.argv[3]) if len(sys.argv) > 3 else None
 players = src / 'Assets' / 'Profiles' / 'PlayerImages'
 sheets = src / 'chip_table_images'
 
@@ -187,12 +192,14 @@ crown.save(out / 'crown.png', optimize=True)
 print('crown', crown.size)
 
 # The table and room, for the wide layout.
-table = Image.open(next(sheets.glob('561a1f12*'))).convert('RGB')
-table.save(out / 'table.jpg', quality=92)
+table = Image.open(table_image or next(sheets.glob('561a1f12*'))).convert('RGB')
+assert abs(table.width / table.height - 1024 / 559) < .01, 'the table art must be 1024 x 559 or that shape'
+table.save(out / 'table.jpg', quality=90, optimize=True)
 print('table', table.size)
 
 # The felt inside the table's neon rim (the straight part, clear of the ends),
 # for the narrow layout, which draws its own table.
-felt = table.crop((272, 142, 752, 386))
+w, h = table.size
+felt = table.crop((round(w * .266), round(h * .254), round(w * .734), round(h * .68)))
 felt.save(out / 'felt.jpg', quality=90)
 print('felt', felt.size)
