@@ -106,44 +106,33 @@ def multiplayer_advice(room: Room, seat: int) -> dict:
     pot_bb = bot_view.pot / bot_view.big_blind
     to_call_bb = bot_view.to_call / bot_view.big_blind
     stack_bb = bot_view.my_stack / bot_view.big_blind
-
-    ranked = [
-        (ACTION_NAMES[index], value)
-        for index, value in enumerate(q_values)
-        if value is not None and mask[index]
-    ]
-    ranked.sort(key=lambda item: item[1], reverse=True)
-    next_action = ranked[1] if len(ranked) > 1 else None
-
-    context_parts = [
-        f'{street_name}',
-        f'{pot_bb:.1f} BB pot',
-        f'{to_call_bb:.1f} BB to call' if bot_view.to_call else 'no bet to call',
-        f'{stack_bb:.1f} BB stack',
-    ]
-    context = ', '.join(context_parts)
-
     if action == 'fold':
-        reason = 'Protect the stack where the modeled value of continuing is lower.'
-    elif action == 'check_call':
-        reason = (
-            'Continue without risking a larger bet if the pot is profitable to contest.'
-            if bot_view.to_call else
-            'Take the free/checking line instead of committing extra chips.'
-        )
-    else:
-        reason = 'Apply pressure because the model gives a larger wager the highest value.'
-
-    margin_text = ''
-    if next_action is not None:
-        margin = float(q_values[chosen]) - float(next_action[1])
-        if next_action[0] == 'check_call':
-            next_label = 'Check / Call'
-        elif next_action[0] == 'fold':
-            next_label = 'Fold'
+        if bot_view.to_call:
+            reason = (
+                f'Fold here to avoid investing another {to_call_bb:.1f} BB. '
+                'The advisor sees the pot opportunity as less valuable than the chips you would need to continue.'
+            )
         else:
-            next_label = next_action[0].replace('_', ' ').title()
-        margin_text = f' Next-best legal action: {next_label} (score margin {margin:.3f}).'
+            reason = 'Fold instead of putting chips into this pot. The advisor does not see enough value in continuing.'
+    elif action == 'check_call':
+        if bot_view.to_call:
+            reason = (
+                f'Calling is safer than raising. It costs {to_call_bb:.1f} BB to stay in the pot, '
+                f'so you keep the opportunity to improve while risking a controlled amount.'
+            )
+        else:
+            reason = 'Checking keeps your chips invested at zero cost and lets you see another card before deciding.'
+    else:
+        if bot_view.street == 0:
+            reason = (
+                f'Take the initiative with this raise on preflop. It grows the pot only when opponents continue '
+                'and makes them pay to challenge your hand.'
+            )
+        else:
+            reason = (
+                f'Take control of the {street_name.lower()} by raising. '
+                'This puts pressure on opponents and gives you a chance to win the pot before a showdown.'
+            )
 
     return {
         'action': action,
@@ -151,8 +140,7 @@ def multiplayer_advice(room: Room, seat: int) -> dict:
         'label': label,
         'q_value_bb': q_values[chosen],
         'explanation': (
-            f'{reason} Situation: {context}. '
-            f'The DQN gave this recommendation the highest modeled score among legal actions.{margin_text}'
+            reason + f' This is the advisor\'s strongest play with {stack_bb:.1f} BB remaining.'
         ),
     }
 

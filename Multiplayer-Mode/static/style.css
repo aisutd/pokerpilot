@@ -527,6 +527,21 @@ button:focus-visible, input:focus-visible {
 
 .center-msgs > * { pointer-events: auto; }
 
+.table-street {
+  position: absolute;
+  right: 2cqw;
+  bottom: 2cqw;
+  z-index: 5;
+  --px: max(2px, .16cqw);
+  --frame: rgba(242, 180, 51, .75);
+  padding: .5cqw 1cqw;
+  color: var(--text);
+  font: 400 1.25cqw var(--pixel);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
 .result-toast {
   --frame: var(--gold-light);
   max-width: 100%;
@@ -1045,6 +1060,7 @@ button:focus-visible, input:focus-visible {
   .bet[data-pos="right"] { left: 59%; top: 59%; }
 
   .center-msgs { position: static; transform: none; width: 100%; gap: 6px; margin: 4px 0 10px; }
+  .table-street { right: 10px; bottom: 10px; --px: 2px; font-size: 14px; padding: 5px 9px; }
   .result-toast { --px: 3px; font-size: 16px; padding: 6px 14px; }
   .status { --px: 2px; font-size: 16px; padding: 4px 12px; gap: 10px; white-space: normal; text-align: center; }
   .status .hand-done { gap: 10px; }

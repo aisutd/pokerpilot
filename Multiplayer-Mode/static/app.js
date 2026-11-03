@@ -870,6 +870,8 @@ function render(v) {
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const mode = v.mode === 'pve' ? `AI: ${capitalize(v.difficulty)}` : 'PvP';
   $('street').textContent = `${v.paused ? 'Paused' : v.hand_over ? 'Hand over' : v.street} · ${mode}`;
+  $('table-street').textContent = v.paused ? 'Paused' : v.hand_over ? 'Hand over' : v.street;
+  $('table-street').hidden = Boolean(!v.street);
 
   renderSeats(v, thinking);
   renderStepper($('game-seat-stepper'), latest.room, you, v.hand_over);
