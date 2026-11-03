@@ -25,6 +25,7 @@ from flask import Flask, jsonify, redirect, request, send_from_directory, sessio
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / 'backend' / '.env')
 from backend.auth_routes import get_user, register_auth, require_auth, require_csrf  # noqa: E402
 
 from engine.bots import DIFFICULTIES

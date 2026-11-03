@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
-import type { EmojiClickData } from 'emoji-picker-react';
+import type { EmojiClickData, Theme } from 'emoji-picker-react';
 import './App.css';
 
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
@@ -11,7 +11,7 @@ interface ChatMessage {
 }
 
 const CHAT_WS_BASE_URL = import.meta.env.VITE_CHAT_WS_URL
-  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.hostname}:3000`;
+  || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/chat-ws`;
 
 function isChatMessage(message: unknown): message is ChatMessage {
   return typeof message === 'object'
@@ -172,7 +172,7 @@ function App() {
       {showEmojiPicker && (
         <div className="emoji-picker-container" ref={emojiPickerRef}>
           <Suspense fallback={<div className="emoji-picker-loading">Loading emojis…</div>}>
-            <EmojiPicker onEmojiClick={handleEmojiClick} width={Math.min(320, window.innerWidth - 56)} height={360} />
+            <EmojiPicker onEmojiClick={handleEmojiClick} theme={'dark' as Theme} width={Math.min(320, window.innerWidth - 56)} height={360} />
           </Suspense>
         </div>
       )}

@@ -233,6 +233,25 @@ class RoomTest(unittest.TestCase):
         with self.assertRaises(GameError):
             room.join('   ')
 
+    def test_everyone_gets_their_own_portrait(self) -> None:
+        room, tokens, sockets = make_room(['Ann', 'Bob'], 'pve')
+        room.start_game(tokens[0])
+        seats = sockets[tokens[0]].last['game']['seats']
+        faces = [seat['portrait'] for seat in seats]
+        self.assertEqual(len(set(faces)), SEAT_COUNT)
+        self.assertTrue(all(face in range(1, 11) for face in faces))
+        self.assertEqual(faces[:2], [1, 2])  # people first get faces no AI player uses
+        self.assertEqual([m['portrait'] for m in sockets[tokens[1]].last['room']['seats']],
+                         [room.seats[i].portrait for i in range(SEAT_COUNT)])
+
+        # A full ten-seat PvP table still has ten different faces.
+        names = [f'P{i}' for i in range(MAX_SEATS)]
+        room, tokens, _ = make_room(names[:SEAT_COUNT])
+        room.resize(tokens[0], MAX_SEATS)
+        for name in names[SEAT_COUNT:]:
+            room.join(name)
+        self.assertEqual(sorted(seat.portrait for seat in room.seats), list(range(1, 11)))
+
     def test_only_the_actor_can_act(self) -> None:
         room, tokens, _ = make_room(['Ann', 'Bob', 'Cy'])
         room.start_game(tokens[0])

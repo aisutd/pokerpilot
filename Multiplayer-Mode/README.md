@@ -78,20 +78,61 @@ The chat box is the team's (`client/` and `chat-api/`, from the
 unchanged. Each room gets a private chat id, sent only to that room's
 members, so other rooms can't read or post in it. The chat server only
 relays messages and keeps no history, so a reloaded page starts with an
-empty chat. Friends on other devices also need port 3000 open (allow Node.js
-through Windows Firewall), as well as 5001.
+empty chat. The page reaches the chat server through `/chat-ws` on the game
+server, so friends only need port 5001 (or the ngrok link below).
+
+### Playing over the internet (ngrok)
+
+While `app.py` runs it keeps an ngrok tunnel to port 5001 open: it starts
+ngrok if needed, and restarts it or reopens the tunnel if it goes away
+(install ngrok and run `ngrok config add-authtoken <token>` once). The
+server prints the public link, and room invite links use it. Opening the
+site on this PC (`127.0.0.1`, `localhost`) or by its Wi-Fi address
+redirects to the public link while the tunnel is up. ngrok keeps
+running after the server stops, so restarting the server keeps the same
+link; the link changes only when ngrok itself restarts. Visitors see
+ngrok's one-time warning page first; they click **Visit Site**.
+
+### Art
+
+The pixel art comes from the team repo (`aisutd/pokerpilot`, `main`):
+player portraits from `Assets/Profiles/PlayerImages/P1`-`P10`, and chips,
+the button icons and the table from `chip_table_images`. The table screen
+is laid out like the mock-up in that folder: on wide screens the whole
+screen is the table art, with crowned name plates, cards standing above
+them, your plate bottom left with your cards in a lit box in the middle,
+CHECK / FOLD / CALL / BET-RAISE along the bottom, and MENU, SETTINGS,
+SOUND and the chat button bottom right. BET / RAISE opens the bet sizes;
+press it again to bet. Phones held upright get the same pieces stacked.
+
+Everyone at a table gets their own portrait. Each AI player has a fixed
+one, and people get one that nobody else in the room has. Bets and the pot
+show chips coloured by amount (white $1, red $5, blue $10, green $25, black
+$100, purple $500, yellow $1,000). Settings (sound, naming your hand, bet
+size shortcuts, player stats) are remembered in the browser.
+
+The originals have a checkerboard painted in where they should be
+transparent, so `tools/make_art.py` cuts the portraits out and slices the
+chip sheet into `static/art`. To rebuild it, copy those two folders from
+the team repo into one folder, then run (needs Pillow):
+
+```bash
+python tools/make_art.py <folder with Assets/ and chip_table_images/> static/art
+```
 
 ## Project layout
 
 ```
-app.py            Flask server: room HTTP API, the /ws WebSocket, and /chat/
+app.py            Flask server: room HTTP API, the /ws WebSocket, /chat/ and /chat-ws
 engine/room.py    Rooms: seating, turn clocks, AI turns, per-player views
 engine/bots.py    AI players (copied from PokerPilot-Website)
 static/           Lobby, waiting room and table (no build step)
+static/art/       Portraits, chips, felt and icon (built by tools/make_art.py)
 client/           Chat box UI (React + Vite; built into client/dist)
 chat-api/         Chat server: Node.js WebSocket relay on port 3000
 tests/            Room tests:  python -W error::UserWarning -m unittest tests.test_room
                   Chat relay:  npm test --prefix chat-api
+tools/make_art.py Builds static/art from the team's art (see Art above)
 ```
 
 ### Protocol

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Pilot</title>
+<style>
+  /* ===== CHANGE THE LOOK HERE ===== */
+  :root {
+    --background: #ffffff;   /* page background */
+    --text: #222222;         /* main text color */
+    --button: #1a7f4b;       /* button color */
+    --button-text: #ffffff;  /* text on the button */
+    --error: #c0392b;        /* error message color */
+  }
+  /* ================================= */
+
+  body {
+    font-family: system-ui, sans-serif;
+    background: var(--background);
+    color: var(--text);
+    max-width: 400px;
+    margin: 60px auto;
+    padding: 0 20px;
+  }
+  input, button { font-size: 1rem; padding: 10px; }
+  input { width: 100%; box-sizing: border-box; margin: 8px 0; }
+  button {
+    width: 100%;
+    background: var(--button);
+    color: var(--button-text);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.6; }
+  #output { margin-top: 20px; }
+  .error { color: var(--error); }
+</style>
+</head>
+<body>
+
+  <h1>Poker Pilot</h1>
+
+  <label for="username">Username</label>
+  <input id="username" placeholder="Enter your username">
+  <button id="go">Get</button>
+
+  <p id="output"></p>
+
+<script>
+  // Where the backend is running
+  const API_URL = "http://localhost:8000";
+
+  const output = document.getElementById("output");
+  const btn = document.getElementById("go");
+  const input = document.getElementById("username");
+
+  // Send the username to the backend and show the reply
+  async function send() {
+    const username = input.value.trim();
+    if (!username) return;
+
+    btn.disabled = true;
+    output.className = "";
+    output.textContent = "Loading...";
+
+    try {
+      const res = await fetch(API_URL + "/api/pilot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Request failed");
+      output.textContent = data.message;
+    } catch (e) {
+      output.className = "error";
+      output.textContent = "Error: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  btn.addEventListener("click", send);
+  input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+</script>
+</body>
+</html>
