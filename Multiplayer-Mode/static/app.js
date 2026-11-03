@@ -309,10 +309,18 @@ function handle(message) {
     busy = false;
     const toast = $('result-toast');
     if (toast) {
-      toast.textContent = `AI Advisor: ${message.label}`;
+      toast.replaceChildren();
+      const recommendation = document.createElement('div');
+      recommendation.textContent = `AI Advisor: ${message.label}`;
+      toast.appendChild(recommendation);
+      if (message.explanation) {
+        const explanation = document.createElement('small');
+        explanation.textContent = message.explanation;
+        toast.appendChild(explanation);
+      }
       toast.hidden = false;
       clearTimeout(window._advisorToastTimer);
-      window._advisorToastTimer = setTimeout(() => { toast.hidden = true; }, 8000);
+      window._advisorToastTimer = setTimeout(() => { toast.hidden = true; }, 15000);
     }
   } else if (message.type === 'gone' || message.type === 'left') {
     backToLobby(message.type === 'gone' ? message.message : null);

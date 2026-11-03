@@ -100,11 +100,60 @@ def multiplayer_advice(room: Room, seat: int) -> dict:
         if action == 'check_call'
         else f'Raise to ${amount / 100:,.2f}'
     )
+
+    bot_view = room.bot_view(seat)
+    street_name = ('Preflop', 'Flop', 'Turn', 'River')[bot_view.street]
+    pot_bb = bot_view.pot / bot_view.big_blind
+    to_call_bb = bot_view.to_call / bot_view.big_blind
+    stack_bb = bot_view.my_stack / bot_view.big_blind
+
+    ranked = [
+        (ACTION_NAMES[index], value)
+        for index, value in enumerate(q_values)
+        if value is not None and mask[index]
+    ]
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    next_action = ranked[1] if len(ranked) > 1 else None
+
+    context_parts = [
+        f'{street_name}',
+        f'{pot_bb:.1f} BB pot',
+        f'{to_call_bb:.1f} BB to call' if bot_view.to_call else 'no bet to call',
+        f'{stack_bb:.1f} BB stack',
+    ]
+    context = ', '.join(context_parts)
+
+    if action == 'fold':
+        reason = 'Protect the stack where the modeled value of continuing is lower.'
+    elif action == 'check_call':
+        reason = (
+            'Continue without risking a larger bet if the pot is profitable to contest.'
+            if bot_view.to_call else
+            'Take the free/checking line instead of committing extra chips.'
+        )
+    else:
+        reason = 'Apply pressure because the model gives a larger wager the highest value.'
+
+    margin_text = ''
+    if next_action is not None:
+        margin = float(q_values[chosen]) - float(next_action[1])
+        if next_action[0] == 'check_call':
+            next_label = 'Check / Call'
+        elif next_action[0] == 'fold':
+            next_label = 'Fold'
+        else:
+            next_label = next_action[0].replace('_', ' ').title()
+        margin_text = f' Next-best legal action: {next_label} (score margin {margin:.3f}).'
+
     return {
         'action': action,
         'amount': amount,
         'label': label,
         'q_value_bb': q_values[chosen],
+        'explanation': (
+            f'{reason} Situation: {context}. '
+            f'The DQN gave this recommendation the highest modeled score among legal actions.{margin_text}'
+        ),
     }
 
 
