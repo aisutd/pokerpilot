@@ -228,9 +228,11 @@
       </div>
 
       <nav class="hud" aria-label="Table buttons">
-        <button id="advisor-toggle" class="hud-btn" aria-label="Ask AI Advisor" title="Ask AI Advisor">
-          <span class="hud-icon">&#9824;</span>
-          <span class="hud-label">AI Advisor</span>
+        <button id="advisor-toggle" class="hud-btn" aria-expanded="false" aria-controls="advisor-panel" aria-label="AI Advisor" title="AI Advisor">
+          <span class="hud-icon chat-icon">
+            <svg viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><path fill="#ffd34d" d="M5 1h2v1h1v1h1v1h1v1h1v2h-1v1h-3v1h1v1h1v1H3v-1h1V9h1V8H2V7H1V5h1V4h1V3h1V2h1z"/></svg>
+          </span>
+          <span class="hud-label">Advisor</span>
         </button>
         <button id="chat-toggle" class="hud-btn" aria-expanded="false" aria-controls="chat-widget" aria-label="Table chat" title="Table chat">
           <span class="hud-icon chat-icon">
@@ -278,6 +280,24 @@
         <button id="history-close" class="ghost" aria-label="Close history">&times;</button>
       </div>
       <ol class="log" id="log"></ol>
+    </aside>
+    <aside class="advisor-panel" id="advisor-panel" aria-label="AI Advisor" hidden>
+      <header class="advisor-head">
+        <h2>AI Advisor</h2>
+        <button id="advisor-close" class="ghost" aria-label="Close AI Advisor">&times;</button>
+      </header>
+      <section class="advisor-box advisor-play" id="advisor-play">
+        <h3>Recommended play</h3>
+        <p id="advisor-label"></p>
+      </section>
+      <section class="advisor-box" id="advisor-why-box">
+        <h3>Why</h3>
+        <p id="advisor-why"></p>
+      </section>
+      <section class="advisor-box" id="advisor-numbers-box">
+        <h3>The numbers</h3>
+        <dl id="advisor-numbers"></dl>
+      </section>
     </aside>
   </section>
 

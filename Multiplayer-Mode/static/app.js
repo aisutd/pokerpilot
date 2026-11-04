@@ -303,28 +303,88 @@ function handle(message) {
     }
   } else if (message.type === 'error') {
     busy = false;
-    showError(message.message);
+    if (advisorPending) {
+      advisorPending = false;
+      showAdvisorNote('Not available', message.message);
+    } else {
+      showError(message.message);
+    }
     if (view) render(view);
   } else if (message.type === 'advice') {
-    busy = false;
-    const toast = $('result-toast');
-    if (toast) {
-      toast.replaceChildren();
-      const recommendation = document.createElement('div');
-      recommendation.textContent = `AI Advisor: ${message.label}`;
-      toast.appendChild(recommendation);
-      if (message.explanation) {
-        const explanation = document.createElement('small');
-        explanation.textContent = message.explanation;
-        toast.appendChild(explanation);
-      }
-      toast.hidden = false;
-      clearTimeout(window._advisorToastTimer);
-      window._advisorToastTimer = setTimeout(() => { toast.hidden = true; }, 15000);
-    }
+    showAdvice(message);
   } else if (message.type === 'gone' || message.type === 'left') {
     backToLobby(message.type === 'gone' ? message.message : null);
   }
+}
+
+// ------------------------------------------------------------ AI advisor
+
+// The panel sits right of the table and follows the game: it asks for new
+// advice on each of your turns and clears when the turn is over.
+let advisorOpen = false;
+let advisorPending = false; // a request is on its way to the server
+let advisedTurn; // the turn the panel is showing
+
+function advisorTurn() {
+  return view && view.legal ? `${view.hand_number}:${view.street}:${view.pot}` : null;
+}
+
+function showAdvisorNote(label, why) {
+  $('advisor-play').dataset.action = '';
+  $('advisor-label').textContent = label;
+  $('advisor-why').textContent = why || '';
+  $('advisor-why-box').hidden = !why;
+  $('advisor-numbers-box').hidden = true;
+}
+
+function showAdvice(advice) {
+  advisorPending = false;
+  if (!advisorOpen || advisorTurn() !== advisedTurn) return;
+
+  const toCall = view.legal.call;
+  const numbers = [
+    ['Pot', money(view.pot)],
+    ['To call', toCall ? money(toCall) : 'Free'],
+    ['Your stack', money(view.seats[view.me].stack)],
+  ];
+  if (toCall) numbers.splice(2, 0, ['Pot odds', `${Math.round(toCall / (view.pot + toCall) * 100)}%`]);
+
+  $('advisor-play').dataset.action = advice.action;
+  $('advisor-label').textContent = advice.label;
+  $('advisor-why').textContent = advice.explanation;
+  $('advisor-why-box').hidden = !advice.explanation;
+  $('advisor-numbers').replaceChildren(...numbers.flatMap(([name, value]) => {
+    const term = document.createElement('dt');
+    const detail = document.createElement('dd');
+    term.textContent = name;
+    detail.textContent = value;
+    return [term, detail];
+  }));
+  $('advisor-numbers-box').hidden = false;
+}
+
+function refreshAdvisor() {
+  const turn = advisorTurn();
+  if (!advisorOpen || turn === advisedTurn) return;
+
+  advisedTurn = turn;
+  if (turn) {
+    advisorPending = true;
+    showAdvisorNote('Thinking…');
+    sendMessage({ type: 'advice' });
+  } else {
+    advisorPending = false;
+    showAdvisorNote('Waiting for your turn', 'Your next recommendation will appear here.');
+  }
+}
+
+function setAdvisorOpen(open) {
+  advisorOpen = open;
+  advisedTurn = undefined;
+  $('advisor-panel').hidden = !open;
+  $('advisor-toggle').setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('advisor-open', open);
+  refreshAdvisor();
 }
 
 // ----------------------------------------------------------- table chat
@@ -556,6 +616,7 @@ function backToLobby(error) {
   toggleHistory(false);
   closePanels();
   setTray(false);
+  setAdvisorOpen(false);
   showScreen('lobby');
   showPanel('join');
   showError(error);
@@ -875,6 +936,7 @@ function render(v) {
 
   renderSeats(v, thinking);
   renderStepper($('game-seat-stepper'), latest.room, you, v.hand_over);
+  refreshAdvisor();
 
   const board = [...v.board];
   while (board.length < 5) board.push('slot');
@@ -1193,10 +1255,8 @@ document.querySelectorAll('[data-seats]').forEach((button) => {
 
 $('start-game').addEventListener('click', () => sendMessage({ type: 'start' }));
 $('leave-room').addEventListener('click', leaveRoom);
-$('advisor-toggle').addEventListener('click', () => {
-  if (view && view.legal) sendMessage({ type: 'advice' });
-  else showError('The AI advisor is available only on your turn.');
-});
+$('advisor-toggle').addEventListener('click', () => setAdvisorOpen(!advisorOpen));
+$('advisor-close').addEventListener('click', () => setAdvisorOpen(false));
 
 $('btn-check').addEventListener('click', () => act('check'));
 $('btn-fold').addEventListener('click', () => act('fold'));

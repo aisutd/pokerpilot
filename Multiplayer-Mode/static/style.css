@@ -36,7 +36,7 @@
    corners notched by a one-pixel outline (--frame), a light top and dark
    bottom bevel, and a hard drop shadow. Rules set --face / --frame. */
 .pot, .bet, .seat-action, .result-toast, .status, .game-error, .raise-tray,
-.popover, .history, .modal-card, .chat-widget {
+.popover, .history, .modal-card, .chat-widget, .advisor-box {
   border: 0;
   border-radius: 0;
   background: var(--face, var(--panel));

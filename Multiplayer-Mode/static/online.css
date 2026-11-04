@@ -465,3 +465,73 @@
   .chat-widget { right: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px)); }
   .chat-widget { height: 476px; }
 }
+
+/* ------------------------------------------------------------ AI advisor */
+
+/* A column right of the table: the stage gets narrower and everything on it
+   scales with it (cqw), so no seat is covered. */
+:root { --advisor-w: clamp(250px, 24vw, 340px); }
+
+.advisor-panel {
+  --px: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  padding: 16px 16px 20px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 3px solid var(--gold);
+  animation: advisor-in .2s ease-out;
+}
+
+@keyframes advisor-in { from { opacity: 0; transform: translateX(24px); } }
+
+.advisor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.advisor-head h2 { margin: 0; font: 400 1.75rem var(--pixel); letter-spacing: .04em; color: var(--gold-light); }
+#advisor-close { width: 32px; height: 32px; padding: 0; color: var(--muted); font-size: 20px; line-height: 1; }
+
+.advisor-box { --face: var(--panel-2); --frame: rgba(242, 180, 51, .55); padding: 12px 14px; }
+.advisor-box h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font: 400 1rem var(--pixel);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.advisor-box p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+
+.advisor-play p { font: 400 1.9rem/1.1 var(--pixel); letter-spacing: .03em; }
+.advisor-play[data-action="fold"] { --face: #c8323c; --face-hi: #ff7f7f; --face-lo: #7e1820; --frame: #1c0407; }
+.advisor-play[data-action="check_call"] { --face: #2f9447; --face-hi: #7fdc7c; --face-lo: #1b5a2a; --frame: #1c0407; }
+.advisor-play[data-action="raise"] { --face: var(--gold); --face-hi: #ffe58a; --face-lo: #a86e12; --frame: #1c0407; }
+.advisor-play[data-action="fold"] h3, .advisor-play[data-action="check_call"] h3 { color: #fff4dc; }
+.advisor-play[data-action="raise"] h3, .advisor-play[data-action="raise"] p { color: #3a1206; }
+
+#advisor-numbers { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: 14px; }
+#advisor-numbers dt { color: var(--muted); }
+#advisor-numbers dd { margin: 0; color: var(--text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 861px), (orientation: landscape) {
+  body.advisor-open #game { grid-template-columns: minmax(0, 1fr) var(--advisor-w); height: 100dvh; overflow: hidden; }
+  body.advisor-open .stage { width: min(calc(100vw - var(--advisor-w)), calc(100dvh * 1024 / 559)); }
+  .advisor-panel { place-self: stretch; height: 100dvh; }
+  body.advisor-open .chat-widget.at-table { right: calc(var(--advisor-w) + 12px); }
+}
+
+/* phones: no room beside the table, so it slides over from the right */
+@media (max-width: 860px) and (orientation: portrait) {
+  .advisor-panel {
+    position: fixed;
+    z-index: 25;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(86vw, 340px);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, .5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advisor-panel { animation: none; }
+}
