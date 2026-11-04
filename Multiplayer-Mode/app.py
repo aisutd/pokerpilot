@@ -55,6 +55,94 @@ register_auth(app)
 
 rooms: dict[str, Room] = {}
 rooms_lock = threading.Lock()
+WEBSITE_DIR = ROOT_DIR / 'PokerPilot-Website'
+ADVISOR_CHECKPOINT = WEBSITE_DIR / 'dqn_model_surya' / 'checkpoints' / 'pokerpilot_dqn.pt'
+sys.path.insert(0, str(WEBSITE_DIR))
+
+
+def multiplayer_advice(room: Room, seat: int) -> dict:
+    if room.actor_seat != seat:
+        raise GameError('The AI advisor is available only on your turn.')
+    if not ADVISOR_CHECKPOINT.is_file():
+        raise GameError('No trained DQN checkpoint is installed. Train the agent first.')
+
+    try:
+        os.environ.setdefault('OMP_NUM_THREADS', '1')
+        from dqn_model_surya.env import (
+            ACTION_NAMES,
+            action_to_engine_action,
+            legal_action_mask,
+            observation_from_table,
+        )
+        from dqn_model_surya.model import choose_greedy_action, load_policy
+    except ImportError as error:
+        raise GameError('The DQN advisor dependencies are not installed.') from error
+
+    network, metadata = load_policy(
+        str(ADVISOR_CHECKPOINT),
+        ADVISOR_CHECKPOINT.stat().st_mtime_ns,
+    )
+    state_vector = observation_from_table(room, seat)
+    if (
+        metadata.get('state_size') != len(state_vector)
+        or metadata.get('action_count') != len(ACTION_NAMES)
+        or metadata.get('action_names') != list(ACTION_NAMES)
+    ):
+        raise GameError('The trained DQN checkpoint uses incompatible state/actions.')
+
+    mask = legal_action_mask(room, seat)
+    chosen, q_values = choose_greedy_action(network, state_vector, mask)
+    action, amount = action_to_engine_action(room, chosen, seat)
+    label = (
+        'Fold'
+        if action == 'fold'
+        else 'Check / Call'
+        if action == 'check_call'
+        else f'Raise to ${amount / 100:,.2f}'
+    )
+
+    bot_view = room.bot_view(seat)
+    street_name = ('Preflop', 'Flop', 'Turn', 'River')[bot_view.street]
+    pot_bb = bot_view.pot / bot_view.big_blind
+    to_call_bb = bot_view.to_call / bot_view.big_blind
+    stack_bb = bot_view.my_stack / bot_view.big_blind
+    if action == 'fold':
+        if bot_view.to_call:
+            reason = (
+                f'Fold here to avoid investing another {to_call_bb:.1f} BB. '
+                'The advisor sees the pot opportunity as less valuable than the chips you would need to continue.'
+            )
+        else:
+            reason = 'Fold instead of putting chips into this pot. The advisor does not see enough value in continuing.'
+    elif action == 'check_call':
+        if bot_view.to_call:
+            reason = (
+                f'Calling is safer than raising. It costs {to_call_bb:.1f} BB to stay in the pot, '
+                f'so you keep the opportunity to improve while risking a controlled amount.'
+            )
+        else:
+            reason = 'Checking keeps your chips invested at zero cost and lets you see another card before deciding.'
+    else:
+        if bot_view.street == 0:
+            reason = (
+                f'Take the initiative with this raise on preflop. It grows the pot only when opponents continue '
+                'and makes them pay to challenge your hand.'
+            )
+        else:
+            reason = (
+                f'Take control of the {street_name.lower()} by raising. '
+                'This puts pressure on opponents and gives you a chance to win the pot before a showdown.'
+            )
+
+    return {
+        'action': action,
+        'amount': amount,
+        'label': label,
+        'q_value_bb': q_values[chosen],
+        'explanation': (
+            reason + f' This is the advisor\'s strongest play with {stack_bb:.1f} BB remaining.'
+        ),
+    }
 
 
 def prune() -> None:
@@ -335,6 +423,11 @@ def play(ws):
 
                 if kind == 'action':
                     room.act(token, message.get('action'), message.get('amount'))
+                elif kind == 'advice':
+                    ws.send(json.dumps({
+                        'type': 'advice',
+                        **multiplayer_advice(room, player.seat),
+                    }))
                 elif kind == 'start':
                     room.start_game(token)
                 elif kind == 'settings':

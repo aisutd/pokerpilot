@@ -229,7 +229,7 @@
 .avatar.initial { color: #fff; }
 .seat.empty .seat-stats { visibility: hidden; }
 
-.seat-action.is-away, .seat-action.is-next { background: #4a3a3c; color: #e0d2cf; }
+.seat-action.is-away, .seat-action.is-next { --face: #4a3a3c; --face-hi: #65524f; --face-lo: #30252a; color: #e0d2cf; }
 
 /* turn clock: a bar along the top of the acting player's plate */
 .seat .clock {
@@ -256,6 +256,8 @@
 .ring .plate::before { left: 24%; }
 .ring .seat-cards { --card-w: 2.7cqw; }
 .ring .seat-cards.up { --card-w: 3.1cqw; }
+/* the table buttons sit above the top right plate, so its hand goes below */
+.ring .seat[data-pos="top-right"] .seat-cards { bottom: auto; top: 100%; transform: translate(-50%, 1.2cqw); }
 
 .ring .seat[data-pos="bottom-left"] { left: 9.2%; top: 60%; }
 .ring .seat[data-pos="left"] { left: 9.2%; top: 37%; }
@@ -321,8 +323,16 @@
   z-index: 30;
   right: 18px;
   bottom: 18px;
+  --px: 3px;
+  --face: #1f0508;
   width: min(380px, calc(100vw - 24px));
+  height: 516px;
+  min-width: 280px;
+  max-width: min(760px, calc(100vw - 24px));
+  min-height: 220px;
+  max-height: calc(100dvh - 24px);
   overflow: hidden;
+  resize: none;
   border: 2px solid rgba(242, 180, 51, .55);
   border-radius: 8px;
   background: #1f0508;
@@ -336,8 +346,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 7px 10px 7px 15px;
-  border-bottom: 1px solid rgba(242, 180, 51, .4);
-  background: linear-gradient(120deg, #4a0e15, #2b070b);
+  border-bottom: 3px solid var(--gold);
+  background: #3b0b11;
   color: var(--text);
   font: 400 1rem var(--pixel);
   letter-spacing: .03em;
@@ -348,9 +358,17 @@
 
 .chat-widget-header:active { cursor: grabbing; }
 
-/* at a wide table it opens top right, clear of the chat button */
+/* at a wide table it opens top right, under the buttons (the stage is
+   centred and keeps the table art's 1024 x 559 shape, as in style.css) */
 @media (min-width: 861px), (orientation: landscape) {
-  .chat-widget.at-table { top: 12px; bottom: auto; }
+  .chat-widget.at-table {
+    --stage-w: min(100vw, calc(100dvh * 1024 / 559));
+    --chat-top: calc((100dvh - var(--stage-w) * 559 / 1024) / 2 + var(--stage-w) * .064);
+    top: var(--chat-top);
+    right: calc((100vw - var(--stage-w)) / 2 + var(--stage-w) * .012);
+    bottom: auto;
+  }
+  .chat-widget.at-table .chat-widget-content { height: min(470px, calc(100dvh - var(--chat-top) - 60px)); }
 }
 
 .chat-player-names {
@@ -371,9 +389,10 @@
   height: 30px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(242, 180, 51, .45);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, .25);
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 0, 0, .3);
+  box-shadow: 0 -2px 0 rgba(242, 180, 51, .6), 0 2px 0 rgba(242, 180, 51, .6), -2px 0 0 rgba(242, 180, 51, .6), 2px 0 0 rgba(242, 180, 51, .6);
   color: var(--gold-light);
   font-size: 1.1rem;
   line-height: 1;
@@ -382,18 +401,137 @@
 
 .chat-widget-header button:hover { background: rgba(242, 180, 51, .2); }
 
-.chat-widget-content { height: min(470px, calc(100dvh - 82px)); }
+.chat-widget-content { height: calc(100% - 46px); }
 .chat-widget-content[hidden] { display: none; }
+
+.chat-widget.resizing iframe { pointer-events: none; }
+
+.chat-resize-handle {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  background: var(--gold, #f2b433);
+  border: 2px solid var(--gold-light, #ffe39a);
+  box-shadow: 0 0 0 1px rgba(82, 51, 5, .9), 0 2px 5px rgba(0, 0, 0, .45);
+  touch-action: none;
+  user-select: none;
+}
+
+.chat-resize-handle.nw,
+.chat-resize-handle.ne,
+.chat-resize-handle.se,
+.chat-resize-handle.sw {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.chat-resize-handle.nw { left: -9px; top: -9px; cursor: nwse-resize; }
+.chat-resize-handle.ne { right: -9px; top: -9px; cursor: nesw-resize; }
+.chat-resize-handle.se { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.chat-resize-handle.sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
+
+.chat-resize-handle.n,
+.chat-resize-handle.s {
+  left: 50%;
+  width: 46px;
+  height: 14px;
+  margin-left: -23px;
+  border-radius: 10px;
+}
+.chat-resize-handle.n { top: -7px; cursor: ns-resize; }
+.chat-resize-handle.s { bottom: -7px; cursor: ns-resize; }
+
+.chat-resize-handle.e,
+.chat-resize-handle.w {
+  top: 50%;
+  width: 14px;
+  height: 46px;
+  margin-top: -23px;
+  border-radius: 10px;
+}
+.chat-resize-handle.e { right: -7px; cursor: ew-resize; }
+.chat-resize-handle.w { left: -7px; cursor: ew-resize; }
 
 .chat-widget iframe {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
-  background: #f0f2f5;
+  background: #1f0508;
 }
 
 @media (max-width: 520px) {
   .chat-widget { right: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px)); }
-  .chat-widget-content { height: min(430px, calc(100dvh - 70px)); }
+  .chat-widget { height: 476px; }
+}
+
+/* ------------------------------------------------------------ AI advisor */
+
+/* A column right of the table: the stage gets narrower and everything on it
+   scales with it (cqw), so no seat is covered. */
+:root { --advisor-w: clamp(250px, 24vw, 340px); }
+
+.advisor-panel {
+  --px: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+  padding: 16px 16px 20px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 3px solid var(--gold);
+  animation: advisor-in .2s ease-out;
+}
+
+@keyframes advisor-in { from { opacity: 0; transform: translateX(24px); } }
+
+.advisor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.advisor-head h2 { margin: 0; font: 400 1.75rem var(--pixel); letter-spacing: .04em; color: var(--gold-light); }
+#advisor-close { width: 32px; height: 32px; padding: 0; color: var(--muted); font-size: 20px; line-height: 1; }
+
+.advisor-box { --face: var(--panel-2); --frame: rgba(242, 180, 51, .55); padding: 12px 14px; }
+.advisor-box h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font: 400 1rem var(--pixel);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.advisor-box p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.5; }
+
+.advisor-play p { font: 400 1.9rem/1.1 var(--pixel); letter-spacing: .03em; }
+.advisor-play[data-action="fold"] { --face: #c8323c; --face-hi: #ff7f7f; --face-lo: #7e1820; --frame: #1c0407; }
+.advisor-play[data-action="check_call"] { --face: #2f9447; --face-hi: #7fdc7c; --face-lo: #1b5a2a; --frame: #1c0407; }
+.advisor-play[data-action="raise"] { --face: var(--gold); --face-hi: #ffe58a; --face-lo: #a86e12; --frame: #1c0407; }
+.advisor-play[data-action="fold"] h3, .advisor-play[data-action="check_call"] h3 { color: #fff4dc; }
+.advisor-play[data-action="raise"] h3, .advisor-play[data-action="raise"] p { color: #3a1206; }
+
+#advisor-numbers { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 0; font-size: 14px; }
+#advisor-numbers dt { color: var(--muted); }
+#advisor-numbers dd { margin: 0; color: var(--text); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+
+@media (min-width: 861px), (orientation: landscape) {
+  body.advisor-open #game { grid-template-columns: minmax(0, 1fr) var(--advisor-w); height: 100dvh; overflow: hidden; }
+  body.advisor-open .stage { width: min(calc(100vw - var(--advisor-w)), calc(100dvh * 1024 / 559)); }
+  .advisor-panel { place-self: stretch; height: 100dvh; }
+  body.advisor-open .chat-widget.at-table { right: calc(var(--advisor-w) + 12px); }
+}
+
+/* phones: no room beside the table, so it slides over from the right */
+@media (max-width: 860px) and (orientation: portrait) {
+  .advisor-panel {
+    position: fixed;
+    z-index: 25;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(86vw, 340px);
+    box-shadow: -12px 0 32px rgba(0, 0, 0, .5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advisor-panel { animation: none; }
 }

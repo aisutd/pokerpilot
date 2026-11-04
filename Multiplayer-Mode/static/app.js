@@ -303,11 +303,88 @@ function handle(message) {
     }
   } else if (message.type === 'error') {
     busy = false;
-    showError(message.message);
+    if (advisorPending) {
+      advisorPending = false;
+      showAdvisorNote('Not available', message.message);
+    } else {
+      showError(message.message);
+    }
     if (view) render(view);
+  } else if (message.type === 'advice') {
+    showAdvice(message);
   } else if (message.type === 'gone' || message.type === 'left') {
     backToLobby(message.type === 'gone' ? message.message : null);
   }
+}
+
+// ------------------------------------------------------------ AI advisor
+
+// The panel sits right of the table and follows the game: it asks for new
+// advice on each of your turns and clears when the turn is over.
+let advisorOpen = false;
+let advisorPending = false; // a request is on its way to the server
+let advisedTurn; // the turn the panel is showing
+
+function advisorTurn() {
+  return view && view.legal ? `${view.hand_number}:${view.street}:${view.pot}` : null;
+}
+
+function showAdvisorNote(label, why) {
+  $('advisor-play').dataset.action = '';
+  $('advisor-label').textContent = label;
+  $('advisor-why').textContent = why || '';
+  $('advisor-why-box').hidden = !why;
+  $('advisor-numbers-box').hidden = true;
+}
+
+function showAdvice(advice) {
+  advisorPending = false;
+  if (!advisorOpen || advisorTurn() !== advisedTurn) return;
+
+  const toCall = view.legal.call;
+  const numbers = [
+    ['Pot', money(view.pot)],
+    ['To call', toCall ? money(toCall) : 'Free'],
+    ['Your stack', money(view.seats[view.me].stack)],
+  ];
+  if (toCall) numbers.splice(2, 0, ['Pot odds', `${Math.round(toCall / (view.pot + toCall) * 100)}%`]);
+
+  $('advisor-play').dataset.action = advice.action;
+  $('advisor-label').textContent = advice.label;
+  $('advisor-why').textContent = advice.explanation;
+  $('advisor-why-box').hidden = !advice.explanation;
+  $('advisor-numbers').replaceChildren(...numbers.flatMap(([name, value]) => {
+    const term = document.createElement('dt');
+    const detail = document.createElement('dd');
+    term.textContent = name;
+    detail.textContent = value;
+    return [term, detail];
+  }));
+  $('advisor-numbers-box').hidden = false;
+}
+
+function refreshAdvisor() {
+  const turn = advisorTurn();
+  if (!advisorOpen || turn === advisedTurn) return;
+
+  advisedTurn = turn;
+  if (turn) {
+    advisorPending = true;
+    showAdvisorNote('Thinking…');
+    sendMessage({ type: 'advice' });
+  } else {
+    advisorPending = false;
+    showAdvisorNote('Waiting for your turn', 'Your next recommendation will appear here.');
+  }
+}
+
+function setAdvisorOpen(open) {
+  advisorOpen = open;
+  advisedTurn = undefined;
+  $('advisor-panel').hidden = !open;
+  $('advisor-toggle').setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('advisor-open', open);
+  refreshAdvisor();
 }
 
 // ----------------------------------------------------------- table chat
@@ -368,6 +445,109 @@ function setupChatControls() {
   const widget = $('chat-widget');
   const handle = $('chat-drag-handle');
   let drag = null;
+  let resizeSaveTimer = null;
+
+  try {
+    const saved = JSON.parse(localStorage.getItem('pokerpilot-chat-size') || 'null');
+    if (saved && Number.isFinite(saved.width) && Number.isFinite(saved.height)) {
+      widget.style.width = `${Math.max(280, Math.min(window.innerWidth - 24, saved.width))}px`;
+      widget.style.height = `${Math.max(220, Math.min(window.innerHeight - 24, saved.height))}px`;
+    }
+  } catch { /* ignore unavailable storage */ }
+
+  if ('ResizeObserver' in window) {
+    const resizeObserver = new ResizeObserver(() => {
+      clearTimeout(resizeSaveTimer);
+      resizeSaveTimer = setTimeout(() => {
+        try {
+          localStorage.setItem('pokerpilot-chat-size', JSON.stringify({
+            width: widget.offsetWidth,
+            height: widget.offsetHeight,
+          }));
+        } catch { /* ignore unavailable storage */ }
+      }, 150);
+    });
+    resizeObserver.observe(widget);
+  }
+
+  let resize = null;
+
+  widget.querySelectorAll('[data-resize]').forEach((resizeHandle) => {
+    resizeHandle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      const rect = widget.getBoundingClientRect();
+      widget.style.left = `${rect.left}px`;
+      widget.style.top = `${rect.top}px`;
+      widget.style.right = 'auto';
+      widget.style.bottom = 'auto';
+      widget.classList.add('resizing');
+      resize = {
+        pointerId: event.pointerId,
+        direction: resizeHandle.dataset.resize,
+        startX: event.clientX,
+        startY: event.clientY,
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+      resizeHandle.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+
+    resizeHandle.addEventListener('pointermove', (event) => {
+      if (!resize || event.pointerId !== resize.pointerId) return;
+
+      const minWidth = 280;
+      const maxWidth = Math.min(760, window.innerWidth - 24);
+      const minHeight = 220;
+      const maxHeight = window.innerHeight - 24;
+      const dx = event.clientX - resize.startX;
+      const dy = event.clientY - resize.startY;
+      const direction = resize.direction;
+      let left = resize.left;
+      let top = resize.top;
+      let width = resize.width;
+      let height = resize.height;
+
+      if (direction.includes('e')) width = resize.width + dx;
+      if (direction.includes('w')) {
+        width = resize.width - dx;
+        left = resize.left + dx;
+      }
+      if (direction.includes('s')) height = resize.height + dy;
+      if (direction.includes('n')) {
+        height = resize.height - dy;
+        top = resize.top + dy;
+      }
+
+      width = Math.max(minWidth, Math.min(maxWidth, width));
+      height = Math.max(minHeight, Math.min(maxHeight, height));
+
+      if (direction.includes('w')) left = resize.left + resize.width - width;
+      if (direction.includes('n')) top = resize.top + resize.height - height;
+
+      left = Math.max(0, Math.min(window.innerWidth - width, left));
+      top = Math.max(0, Math.min(window.innerHeight - height, top));
+
+      widget.style.left = `${left}px`;
+      widget.style.top = `${top}px`;
+      widget.style.width = `${width}px`;
+      widget.style.height = `${height}px`;
+    });
+
+    const stopResizing = (event) => {
+      if (!resize || event.pointerId !== resize.pointerId) return;
+      if (resizeHandle.hasPointerCapture(event.pointerId)) {
+        resizeHandle.releasePointerCapture(event.pointerId);
+      }
+      resize = null;
+      widget.classList.remove('resizing');
+    };
+    resizeHandle.addEventListener('pointerup', stopResizing);
+    resizeHandle.addEventListener('pointercancel', stopResizing);
+  });
 
   handle.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || event.target.closest('button')) return;
@@ -436,6 +616,7 @@ function backToLobby(error) {
   toggleHistory(false);
   closePanels();
   setTray(false);
+  setAdvisorOpen(false);
   showScreen('lobby');
   showPanel('join');
   showError(error);
@@ -681,7 +862,9 @@ function buildSeats(seats) {
 }
 
 function seatLabel(seat) {
-  if (seat.last_action) return seat.last_action;
+  if (seat.last_action) {
+    return seat.ai_model ? `${seat.last_action} · ${seat.ai_model}` : seat.last_action;
+  }
   if (seat.status === 'all-in') return 'All-in';
   if (seat.away && seat.status !== 'empty') return 'Away';
   if (seat.status === 'waiting') return 'Next hand';
@@ -748,9 +931,12 @@ function render(v) {
   $('hand-number').textContent = `Hand #${v.hand_number}`;
   const mode = v.mode === 'pve' ? `AI: ${capitalize(v.difficulty)}` : 'PvP';
   $('street').textContent = `${v.paused ? 'Paused' : v.hand_over ? 'Hand over' : v.street} · ${mode}`;
+  $('table-street').textContent = v.paused ? 'Paused' : v.hand_over ? 'Hand over' : v.street;
+  $('table-street').hidden = Boolean(!v.street);
 
   renderSeats(v, thinking);
   renderStepper($('game-seat-stepper'), latest.room, you, v.hand_over);
+  refreshAdvisor();
 
   const board = [...v.board];
   while (board.length < 5) board.push('slot');
@@ -1069,6 +1255,8 @@ document.querySelectorAll('[data-seats]').forEach((button) => {
 
 $('start-game').addEventListener('click', () => sendMessage({ type: 'start' }));
 $('leave-room').addEventListener('click', leaveRoom);
+$('advisor-toggle').addEventListener('click', () => setAdvisorOpen(!advisorOpen));
+$('advisor-close').addEventListener('click', () => setAdvisorOpen(false));
 
 $('btn-check').addEventListener('click', () => act('check'));
 $('btn-fold').addEventListener('click', () => act('fold'));

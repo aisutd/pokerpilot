@@ -65,6 +65,10 @@ class OpponentModel:
 
 
 OPPONENT_MODELS = {
+    'mixed': OpponentModel(
+        'mixed', 'Adaptive AI',
+        'DQN for passive-style opponents; XGBoost for every other player.',
+    ),
     'rules': OpponentModel(
         'rules', 'Classic Bots',
         'Hand-written strategy with a personality for each player.',
@@ -96,6 +100,16 @@ def _missing_packages(*names: str) -> list[str]:
 
 def availability(key: str) -> str | None:
     """None if the model can be used, else a short reason why not."""
+
+    if key == 'mixed':
+        missing = _missing_packages('xgboost', 'pandas', 'torch')
+        if missing:
+            return f'Install {" and ".join(missing)} (pip install -r requirements.txt).'
+        if not (XGBOOST_DIR / 'artifacts' / 'action_model.json').is_file():
+            return 'No trained XGBoost model in pokerpilot_model/artifacts.'
+        if not DQN_CHECKPOINT.is_file():
+            return 'No trained DQN checkpoint is installed.'
+        return None
 
     if key == 'rules':
         return None
@@ -151,6 +165,9 @@ def create_opponent(
 
     if reason is not None:
         raise ModelUnavailable(f'{OPPONENT_MODELS[model].label} is not available: {reason}')
+
+    if model == 'mixed':
+        return MixedOpponentBot(difficulty, character.personality, rng)
 
     if model == 'rules':
         return create_bot(difficulty, character, rng)
@@ -624,3 +641,60 @@ class DQNBot:
             chosen, _ = choose_greedy_action(network, observation, mask)
 
         return action_to_engine_action(table, chosen, seat)
+
+
+# ---------------------------------------------------------------- Mixed routing
+
+# The dataset's passive archetypes keep PFR/VIPIP below 0.65. Live stats use
+# the same ratios, with the current action contributing only 10 percent.
+DQN_PASSIVE_THRESHOLD = 0.55
+MIN_DQN_STAT_HANDS = 5
+NEW_ACTION_WEIGHT = 0.10
+
+
+def passive_profile_score(table: Table, seat: int) -> float:
+    stats = table.seats[seat].stats
+    vpip = stats.vpip_rate
+    pfr = stats.pfr_rate
+    aggression = stats.aggression_factor
+
+    if vpip <= 0:
+        ratio = 0.0
+    else:
+        ratio = pfr / vpip
+
+    ratio_score = 1.0 if ratio <= 0.65 else 0.0
+    aggression_score = 1.0 if aggression <= 0.75 else 0.0
+    baseline_score = 0.65 * ratio_score + 0.35 * aggression_score
+
+    recent_action = table.mixed_recent_action.get(seat)
+    if recent_action is not None:
+        score = (1.0 - NEW_ACTION_WEIGHT) * baseline_score + NEW_ACTION_WEIGHT * recent_action
+    else:
+        score = baseline_score
+
+    return score if stats.hands >= MIN_DQN_STAT_HANDS else 0.0
+
+
+class MixedOpponentBot:
+    """Route each opponent independently between DQN and XGBoost."""
+
+    def __init__(self, difficulty: str, personality: Personality, rng: random.Random | None = None):
+        shared_rng = rng or random.Random()
+        self.xgboost = XGBoostBot(difficulty, personality, shared_rng)
+        self.dqn = DQNBot(difficulty, shared_rng)
+
+    def decide_at_table(self, table: Table, seat: int) -> Decision:
+        score = passive_profile_score(table, seat)
+        if score >= DQN_PASSIVE_THRESHOLD:
+            model = 'DQN'
+            action, amount = self.dqn.decide_at_table(table, seat)
+        else:
+            model = 'XGBoost'
+            action, amount = self.xgboost.decide_at_table(table, seat)
+
+        table.mixed_routing[seat] = {
+            'model': model,
+            'score': round(score, 3),
+        }
+        return action, amount
