@@ -37,6 +37,7 @@ let retries = 0;
 let lanUrl = null;
 let publicUrl = null; // ngrok link, works from anywhere
 let clock = null; // { end, total } in performance.now() milliseconds
+let leaderboardTrigger = null;
 
 // ------------------------------------------------------------- helpers
 
@@ -107,6 +108,56 @@ async function api(path, body) {
     throw new Error((data && (data.detail || data.error)) || 'Something went wrong.');
   }
   return data;
+}
+
+function renderLeaderboard(rows) {
+  const body = $('leaderboard-rows');
+  body.replaceChildren();
+
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    if (row.is_you) tr.classList.add('leaderboard-you');
+
+    for (const value of [
+      `#${row.rank}`,
+      row.name,
+      Number.isSafeInteger(row.net_winnings_cents) ? money(row.net_winnings_cents) : '-',
+      Number.isSafeInteger(row.rounds_participated) ? String(row.rounds_participated) : '-',
+    ]) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.append(td);
+    }
+
+    body.append(tr);
+  }
+}
+
+async function openLeaderboard(trigger) {
+  leaderboardTrigger = trigger;
+  closePanels();
+  const modal = $('leaderboard-modal');
+  modal.hidden = false;
+  $('leaderboard-status').textContent = 'Loading standings...';
+  $('leaderboard-rows').replaceChildren();
+  $('leaderboard-close').focus();
+
+  try {
+    const data = await api('/api/leaderboard');
+    if (modal.hidden) return;
+    renderLeaderboard(Array.isArray(data.standings) ? data.standings : []);
+    $('leaderboard-status').textContent = 'Ranked by cumulative net winnings.';
+  } catch (error) {
+    if (!modal.hidden) $('leaderboard-status').textContent = error.message;
+  }
+}
+
+function closeLeaderboard() {
+  const modal = $('leaderboard-modal');
+  if (modal.hidden) return;
+  modal.hidden = true;
+  if (leaderboardTrigger && leaderboardTrigger.isConnected) leaderboardTrigger.focus();
+  leaderboardTrigger = null;
 }
 
 function showScreen(name) {
@@ -394,6 +445,17 @@ function setAdvisorOpen(open) {
 let chatRoom = null; // the chat id the frame is showing
 let chatToggled = false; // the player minimized or expanded it themselves
 let chatOpen = false; // at the table it shows only after the chat button
+let chatUnreadCount = 0;
+
+function updateChatUnreadCount(count) {
+  chatUnreadCount = count;
+  const badge = $('chat-unread-badge');
+  badge.textContent = count > 99 ? '99+' : String(count);
+  badge.hidden = count === 0;
+  const label = count === 0 ? 'Table chat' : `Table chat, ${count} unread message${count === 1 ? '' : 's'}`;
+  $('chat-toggle').setAttribute('aria-label', label);
+  $('chat-toggle').title = label;
+}
 
 function showChat(status) {
   const atTable = status !== 'lobby';
@@ -405,6 +467,9 @@ function showChat(status) {
   } else if (!chatToggled) {
     setChatMinimized(true); // tucked away in the waiting room
   }
+  if (!$('chat-widget').hidden && !$('chat-widget-content').hidden) {
+    updateChatUnreadCount(0);
+  }
 }
 
 function setChatMinimized(minimized) {
@@ -412,6 +477,7 @@ function setChatMinimized(minimized) {
   $('chat-minimize').setAttribute('aria-expanded', String(!minimized));
   $('chat-minimize').setAttribute('aria-label', minimized ? 'Expand table chat' : 'Minimize table chat');
   $('chat-minimize').textContent = minimized ? '+' : '−';
+  if (!minimized) updateChatUnreadCount(0);
 }
 
 function connectChat(message) {
@@ -436,6 +502,7 @@ function disconnectChat() {
   chatRoom = null;
   chatToggled = false;
   chatOpen = false;
+  updateChatUnreadCount(0);
   $('chat-toggle').setAttribute('aria-expanded', 'false');
   $('chat-frame').src = 'about:blank';
   $('chat-widget').hidden = true;
@@ -444,8 +511,21 @@ function disconnectChat() {
 function setupChatControls() {
   const widget = $('chat-widget');
   const handle = $('chat-drag-handle');
+  const frame = $('chat-frame');
   let drag = null;
   let resizeSaveTimer = null;
+
+  window.addEventListener('message', (event) => {
+    if (event.origin !== window.location.origin || event.source !== frame.contentWindow) return;
+    if (
+      typeof event.data !== 'object'
+      || event.data === null
+      || event.data.type !== 'pokerpilot-chat-message'
+      || event.data.room !== chatRoom
+    ) return;
+    if (!widget.hidden && !$('chat-widget-content').hidden) return;
+    updateChatUnreadCount(chatUnreadCount + 1);
+  });
 
   try {
     const saved = JSON.parse(localStorage.getItem('pokerpilot-chat-size') || 'null');
@@ -589,6 +669,15 @@ function setupChatControls() {
 
   $('chat-toggle').addEventListener('click', () => {
     if (!latest || !chatRoom) return;
+    if (
+      !chatOpen
+      && typeof Notification !== 'undefined'
+      && Notification.permission === 'default'
+    ) {
+      void Notification.requestPermission().catch((error) => {
+        console.warn('Could not request chat notification permission:', error);
+      });
+    }
     chatOpen = !chatOpen;
     showChat(latest.room.status);
   });
@@ -1266,6 +1355,13 @@ $('rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('modal-rebuy').addEventListener('click', () => sendMessage({ type: 'rebuy' }));
 $('restart').addEventListener('click', () => sendMessage({ type: 'restart' }));
 $('to-lobby').addEventListener('click', leaveRoom);
+$('leaderboard-close').addEventListener('click', closeLeaderboard);
+$('leaderboard-modal').addEventListener('click', (event) => {
+  if (event.target === $('leaderboard-modal')) closeLeaderboard();
+});
+document.querySelectorAll('[data-leaderboard-open]').forEach((button) => {
+  button.addEventListener('click', () => openLeaderboard(button));
+});
 $('logout').addEventListener('click', async () => {
   try {
     await api('/api/auth/logout', {});
@@ -1359,10 +1455,12 @@ $('quit').addEventListener('click', () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    closeLeaderboard();
     toggleHistory(false);
     closePanels();
     setTray(false);
   }
+  if (!$('leaderboard-modal').hidden) return;
   if (e.target.tagName === 'INPUT' || e.ctrlKey || e.metaKey || e.altKey) return;
   if ($('game').hidden) return;
 

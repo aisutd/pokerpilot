@@ -64,6 +64,47 @@ class RoomTest(unittest.TestCase):
         self.assertEqual(room.players[token].account_id, 'user-123')
         self.assertNotEqual(token, 'user-123')
 
+    def test_settled_hand_queues_authoritative_account_results(self) -> None:
+        room = Room('LEADERBOARD', seed=11, timers=False)
+        tokens = [
+            room.join('Ann', account_id='account-a'),
+            room.join('Bob', account_id='account-b'),
+        ]
+        room.start_game(tokens[0])
+
+        while not room.hand_over:
+            token = actor_token(room)
+            self.assertIsNotNone(token)
+            room.act(token, 'check_call')
+
+        results = {row['account_id']: row for row in room.pending_round_results}
+        self.assertEqual(set(results), {'account-a', 'account-b'})
+        self.assertEqual(len(results), 2)
+        for token in tokens:
+            result = results[str(room.players[token].account_id)]
+            self.assertEqual(result['round_number'], room.hand_number)
+            self.assertEqual(result['net_cents'], room.result['nets'][token])
+        self.assertEqual(sum(row['net_cents'] for row in results.values()), 0)
+
+    def test_settled_pve_hand_does_not_queue_ai_results(self) -> None:
+        room = Room('LEADERBOARD-PVE', seed=13, timers=False)
+        token = room.join('Ann', account_id='account-a')
+        room.connect(token, FakeSocket())
+        room.update_settings(token, 'pve', 'easy')
+        room.start_game(token)
+
+        while not room.hand_over:
+            actor = actor_token(room)
+            if actor is None:
+                self.assertTrue(room.run_pending(), 'the AI turn was not scheduled')
+            else:
+                room.act(actor, 'check_call')
+
+        self.assertEqual(
+            {row['account_id'] for row in room.pending_round_results},
+            {'account-a'},
+        )
+
     def check_views(self, room: Room, sockets: dict[str, FakeSocket]) -> None:
         for token, ws in sockets.items():
             if token not in room.players:

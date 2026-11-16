@@ -34,6 +34,7 @@ from backend.auth_routes import (  # noqa: E402
 )
 
 from engine.room import GameError, Room
+from leaderboard_store import LeaderboardStore
 
 STATIC_DIR = Path(__file__).parent / 'static'
 CARD_ASSET_DIR = ROOT_DIR / 'Assets' / 'Cards'
@@ -52,6 +53,7 @@ app.secret_key = os.environ.get('POKERPILOT_SECRET') or secrets.token_hex(32)
 app.config['SESSION_COOKIE_NAME'] = 'pokerpilot_multiplayer_session'
 sock = Sock(app)
 register_auth(app)
+leaderboard_store = LeaderboardStore()
 
 rooms: dict[str, Room] = {}
 rooms_lock = threading.Lock()
@@ -151,11 +153,15 @@ def prune() -> None:
     now = time.time()
 
     for code, room in list(rooms.items()):
-        idle = room.idle_since is not None and now - room.idle_since > IDLE_SECONDS
+        with room.lock:
+            if room.pending_round_results:
+                continue
 
-        if room.empty or idle:
-            room.close()
-            del rooms[code]
+            idle = room.idle_since is not None and now - room.idle_since > IDLE_SECONDS
+
+            if room.empty or idle:
+                room.close()
+                del rooms[code]
 
 
 def find_room(code: object) -> Room:
@@ -165,6 +171,59 @@ def find_room(code: object) -> Room:
         raise GameError('No room with that code. Check it and try again.')
 
     return room
+
+
+class LeaderboardUnavailable(Exception):
+    pass
+
+
+def register_leaderboard_player(user: dict) -> None:
+    try:
+        leaderboard_store.ensure_player(user['id'], user['username'])
+    except Exception as error:
+        app.logger.exception('Leaderboard profile registration failed.')
+        raise LeaderboardUnavailable(
+            'Leaderboard storage is unavailable. Apply backend/migrations/002_leaderboard.sql and check DATABASE_URL.'
+        ) from error
+
+
+def persist_room_results(room: Room, *, required: bool = False) -> bool:
+    with room.lock:
+        pending = list(room.pending_round_results)
+        if not pending:
+            return True
+
+        by_player: dict[str, dict[int, int]] = {}
+        for result in pending:
+            player_id = str(result['account_id'])
+            round_number = int(result['round_number'])
+            rounds = by_player.setdefault(player_id, {})
+            rounds[round_number] = rounds.get(round_number, 0) + int(result['net_cents'])
+
+        try:
+            for player_id, rounds in by_player.items():
+                results = [
+                    {'round_number': round_number, 'net_cents': net_cents}
+                    for round_number, net_cents in rounds.items()
+                ]
+                leaderboard_store.save_rounds(player_id, room.leaderboard_game_id, results)
+        except Exception as error:
+            app.logger.exception('Leaderboard round results could not be saved.')
+            if required:
+                raise LeaderboardUnavailable(
+                    'Leaderboard storage is unavailable. Check the database and retry.'
+                ) from error
+            return False
+
+        del room.pending_round_results[:len(pending)]
+        return True
+
+
+def persist_all_room_results(*, required: bool = False) -> bool:
+    with rooms_lock:
+        current_rooms = list(rooms.values())
+
+    return all(persist_room_results(room, required=required) for room in current_rooms)
 
 
 def player_belongs_to_user(player, user) -> bool:
@@ -245,6 +304,11 @@ def handle_game_error(error: GameError):
     return jsonify({'error': str(error)}), 400
 
 
+@app.errorhandler(LeaderboardUnavailable)
+def handle_leaderboard_error(error: LeaderboardUnavailable):
+    return jsonify({'detail': str(error)}), 503
+
+
 @app.get('/')
 def index():
     # Opened on this PC or the Wi-Fi address: move to the public ngrok link,
@@ -307,7 +371,10 @@ def chat_relay(ws):
         return
 
     try:
-        upstream = simple_websocket.Client.connect(f"{CHAT_API_URL}?room={quote(request.args.get('room', ''))}")
+        upstream = simple_websocket.Client.connect(
+            f"{CHAT_API_URL}?room={quote(request.args.get('room', ''))}"
+            f"&name={quote(request.args.get('name', 'Player'))}"
+        )
     except (OSError, simple_websocket.ConnectionError):
         return
 
@@ -341,6 +408,7 @@ def info():
 @require_csrf
 def create_room():
     payload = request.get_json(silent=True) or {}
+    register_leaderboard_player(g.auth_user)
 
     with rooms_lock:
         prune()
@@ -354,6 +422,7 @@ def create_room():
             code = ''.join(secrets.choice(CODE_LETTERS) for _ in range(CODE_LENGTH))
 
         room = Room(code)
+        room.on_results_ready = lambda: persist_room_results(room)
         token = room.join(payload.get('name') or g.auth_user['username'], account_id=g.auth_user['id'])
         rooms[code] = room
 
@@ -369,9 +438,25 @@ def join_room():
     with rooms_lock:
         room = find_room(payload.get('code'))
 
+    register_leaderboard_player(g.auth_user)
     return jsonify({'code': room.code, 'token': room.join(
         payload.get('name') or g.auth_user['username'], account_id=g.auth_user['id']
     )})
+
+
+@app.get('/api/leaderboard')
+@require_auth
+def leaderboard():
+    register_leaderboard_player(g.auth_user)
+    persist_all_room_results(required=True)
+
+    try:
+        return jsonify(leaderboard_store.standings(g.auth_user['id']))
+    except Exception as error:
+        app.logger.exception('Leaderboard standings could not be loaded.')
+        raise LeaderboardUnavailable(
+            'Leaderboard storage is unavailable. Check the database and retry.'
+        ) from error
 
 
 @sock.route('/ws')
@@ -440,19 +525,22 @@ def play(ws):
                     room.restart(token)
                 elif kind == 'leave':
                     room.leave(token)
+                    persist_room_results(room)
                     ws.send(json.dumps({'type': 'left'}))
                     break
                 else:
                     raise GameError('Unknown message.')
+                persist_room_results(room)
             except (GameError, ValueError, AttributeError, TypeError) as error:
                 message = str(error) if isinstance(error, GameError) else 'Bad message.'
                 ws.send(json.dumps({'type': 'error', 'message': message}))
     except ConnectionClosed:
         pass
     finally:
+        persist_room_results(room)
         room.disconnect(ws)
 
-        if room.empty:
+        if room.empty and not room.pending_round_results:
             with rooms_lock:
                 if rooms.get(room.code) is room:
                     room.close()

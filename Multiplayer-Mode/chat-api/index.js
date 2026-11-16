@@ -16,6 +16,9 @@ function createChatServer() {
   wss.on("connection", (socket, request) => {
     const requestUrl = new URL(request.url, "http://localhost");
     const roomId = requestUrl.searchParams.get("room");
+    const sender = (requestUrl.searchParams.get("name") || "Player")
+      .trim()
+      .slice(0, MAX_NAME_LENGTH) || "Player";
     if (!roomId || !/^[A-Za-z0-9_-]{20,64}$/.test(roomId)) {
       socket.close(1008, "A valid game chat room is required.");
       return;
@@ -27,6 +30,16 @@ function createChatServer() {
       chatRooms.set(roomId, room);
     }
     room.add(socket);
+    const joinNotice = JSON.stringify({
+      type: "join",
+      sender,
+      text: `${sender} joined the chat`,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    });
+    for (const client of room) {
+      if (client !== socket && client.readyState === WebSocket.OPEN) client.send(joinNotice);
+    }
+
     socket.on("close", () => {
       room.delete(socket);
       if (room.size === 0) chatRooms.delete(roomId);
@@ -43,16 +56,15 @@ function createChatServer() {
       if (
         typeof payload !== "object"
         || payload === null
-        || typeof payload.sender !== "string"
         || typeof payload.text !== "string"
-        || !payload.sender.trim()
         || !payload.text.trim()
       ) {
         return;
       }
 
       const message = JSON.stringify({
-        sender: payload.sender.trim().slice(0, MAX_NAME_LENGTH),
+        type: "message",
+        sender,
         text: payload.text.trim().slice(0, MAX_MESSAGE_LENGTH),
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });

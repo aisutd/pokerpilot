@@ -23,21 +23,24 @@ The supplied data contains:
 | Test | 1,862 | 262 | 2026-07-16 to 2026-07-19 |
 
 Training fits preprocessing on training data and selects boosting rounds,
-tree depth, and class weighting using validation macro F1. The selected setup
-is refit on train plus validation before the final test evaluation.
+tree depth, and class weighting using validation F1 for check, call, bet, and
+raise, with overall macro F1 as a tie-breaker. The selected setup is refit on
+train plus validation before the final test evaluation.
 
 ## Results
 
-The class-weighted XGBoost classifier was selected by validation macro F1.
-On the held-out test split it scores **87.43% accuracy** and **0.7415 macro
-F1**, up from 0.7125 macro F1 for the previous unweighted model. The
-equity-and-pot-odds rule baseline scores 61.55% accuracy and 0.4162 macro F1;
-the always-fold baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed
-per-action scores, prediction counts, and the confusion matrix are in
+The target-action-tuned XGBoost classifier scores **87.54% accuracy** and
+**0.7482 macro F1** on the held-out test split. Test F1 is 0.8159 for check,
+0.7614 for bet, and 0.7506 for raise. Call F1 improved from 0.6802 to 0.6875
+but remains just below the requested 0.70 lower bound; its validation F1 is
+0.7362. The test split was not used for model selection. The equity-and-pot-odds
+rule baseline scores 61.55% accuracy and 0.4162 macro F1; the always-fold
+baseline scores 63.43% accuracy and 0.1294 macro F1. Detailed per-action
+scores, prediction counts, and the confusion matrix are in
 [`MODEL_OUTPUTS.md`](MODEL_OUTPUTS.md).
 
 Every training or replay run also writes a separate timestamped Markdown
-report under `pokerpilot_model/results/`, preserving earlier run outputs for
+report under `pokerpilot_model/siri/results/`, preserving earlier run outputs for
 comparison.
 
 ## Setup and commands
@@ -59,36 +62,35 @@ brew install libomp
 Train and evaluate the classifier:
 
 ```sh
-python -m pokerpilot_model.train \
+python -m pokerpilot_model.siri.train \
   --data-dir Dataset \
-  --output-dir pokerpilot_model/artifacts
+  --output-dir pokerpilot_model/siri/artifacts \
+  --report-dir pokerpilot_model/siri/results
 ```
 
 Replay test decisions and compare with the rule baseline:
 
 ```sh
-python -m pokerpilot_model.simulate \
+python -m pokerpilot_model.siri.simulate \
   --data-dir Dataset \
-  --model pokerpilot_model/artifacts/model.joblib \
+  --model pokerpilot_model/siri/artifacts/model.joblib \
   --split test
 ```
 
 Run the API with Uvicorn:
 
 ```sh
-uvicorn pokerpilot_model.api:app --host 127.0.0.1 --port 8000
+uvicorn pokerpilot_model.siri.api:app --host 127.0.0.1 --port 8000
 ```
 
 Use `GET /health` to check readiness and `POST /predict` with a JSON object
 containing a `features` object to request an action prediction.
 
-Run package tests:
+Run Siri model tests:
 
 ```sh
-python -m pytest pokerpilot_model/tests -q
+python -m pytest pokerpilot_model/siri/tests -q
 ```
-
-The latest test run reported **8 passed**.
 
 ## PokerKit engine integration
 
@@ -102,8 +104,8 @@ should therefore be treated as experimental until tested with a fitted model.
 Run a seeded simulation with:
 
 ```sh
-PYTHONPATH=.:PokerPilot-Website python -m pokerpilot_model.simulate_engine \
+PYTHONPATH=.:PokerPilot-Website python -m pokerpilot_model.siri.simulate_engine \
   --hands 100 \
   --seed 7 \
-  --model pokerpilot_model/artifacts/model.joblib
+  --model pokerpilot_model/siri/artifacts/model.joblib
 ```

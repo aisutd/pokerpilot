@@ -126,6 +126,7 @@
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  min-height: 0;
   margin-bottom: 12px;
   padding: 4px 6px 4px 4px;
 }
@@ -136,6 +137,7 @@
 .chat-message-wrapper { display: flex; max-width: 82%; flex-direction: column; overflow-wrap: anywhere; }
 .chat-message-wrapper.self { align-self: flex-end; align-items: flex-end; }
 .chat-message-wrapper.other { align-self: flex-start; align-items: flex-start; }
+.chat-system-message { align-self: center; color: var(--muted); font-size: 14px; text-align: center; }
 .message-sender { margin-bottom: 4px; padding: 0 2px; color: var(--gold-light); font-size: 14px; letter-spacing: .03em; }
 
 .chat-message {
@@ -176,7 +178,14 @@
 
 .emoji-picker-loading { padding: 16px; background: var(--panel); color: var(--muted); font-size: 16px; }
 
-.input-container { display: flex; align-items: center; gap: 10px; padding: 2px; }
+.input-container {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 2px;
+}
 
 .emoji-toggle-btn {
   --frame: rgba(242, 180, 51, .55);
@@ -199,7 +208,7 @@
   --drop: transparent;
   min-width: 0;
   height: 36px;
-  flex: 1;
+  flex: 1 1 auto;
   padding: 0 10px;
   outline: none;
   background: rgba(0, 0, 0, .35);
