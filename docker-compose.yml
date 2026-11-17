@@ -1,4 +1,55 @@
+x-env: &env
+  env_file:
+    - path: .env
+      required: false
+    - path: backend/.env
+      required: false
+
 services:
+  # Single-player game: http://localhost:5000. On macOS, AirPlay Receiver
+  # holds port 5000; run with WEB_PORT=5050 (or turn AirPlay Receiver off).
+  web:
+    build:
+      context: .
+      dockerfile: docker/games.Dockerfile
+    image: pokerpilot-games
+    <<: *env
+    command: ["python", "PokerPilot-Website/app.py"]
+    environment:
+      PORT: "5000"
+    ports:
+      - "${WEB_PORT:-5000}:5000"
+    depends_on:
+      - chat-api
+    restart: unless-stopped
+
+  # Multiplayer rooms: http://localhost:5001
+  multiplayer:
+    image: pokerpilot-games
+    pull_policy: never
+    <<: *env
+    command: ["python", "Multiplayer-Mode/app.py"]
+    environment:
+      PORT: "5001"
+      CHAT_API_URL: ws://chat-api:3000/
+    ports:
+      - "5001:5001"
+    depends_on:
+      web:
+        condition: service_started
+      chat-api:
+        condition: service_started
+    restart: unless-stopped
+
+  # Table chat relay. Single-player's chat box connects to <host>:3000
+  # directly, so the port is published; multiplayer reaches it internally.
+  chat-api:
+    build: ./chat-api
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  # FastAPI model/coach API: http://localhost:8000
   backend:
     build:
       context: .
@@ -10,10 +61,12 @@ services:
         required: false
     restart: unless-stopped
 
+  # Sample frontend for the model API: http://localhost:8080
+  # (moved off 3000, which the chat relay needs)
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy

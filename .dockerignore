@@ -6,3 +6,12 @@
 **/.venv
 **/.env
 pokerpilot_model/data
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.pytest_cache
+DQN
+Dataset
+Jacob_XGBoost_Action_Prediction
+poker-pilot
+chip_table_images

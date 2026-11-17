@@ -93,20 +93,35 @@ at `/cards/deck.svg`. It contains all 52 rank/suit faces and a PokerPilot card
 back. Empty slots, face-down cards, opponent-card privacy, deal animation, and
 winning-card highlights continue to use the existing table rendering logic.
 
-## FastAPI model service and Docker
+## Run everything with Docker
 
-The existing FastAPI service remains the model/coach API; it is separate from
-the Flask game apps. Its `/api/recommend` endpoint and XGBoost artifacts are
-unchanged. To run the existing Docker setup:
+Docker runs the whole stack: both game apps, the chat relay, the FastAPI model
+service and its sample frontend. Put `DATABASE_URL` (and optionally
+`GEMINI_API_KEY`, `POKERPILOT_SECRET`) in `.env` or `backend/.env`, then:
 
 ```bash
-cp backend/.env.example backend/.env
 docker compose up -d --build
 ```
 
-The model API is at <http://localhost:8000> and the sample frontend is at
-<http://localhost:3000>. These containers do not start the two PokerKit game
-apps; run those with the Python commands above.
+| Service       | URL                     |
+|---------------|-------------------------|
+| Single-player | <http://localhost:5000> |
+| Multiplayer   | <http://localhost:5001> |
+| Chat relay    | `ws://localhost:3000`   |
+| Model API     | <http://localhost:8000> |
+| Model sample frontend | <http://localhost:8080> |
+
+On macOS, AirPlay Receiver already listens on port 5000. Either turn it off in
+System Settings → General → AirDrop & Handoff, or publish single-player on
+another port: `WEB_PORT=5050 docker compose up -d`.
+
+Both game apps share one image (`docker/games.Dockerfile`), which also builds
+the two chat UIs. Rebuild after pulling new code with
+`docker compose up -d --build`. The DQN advisor needs
+`PokerPilot-Website/dqn_model_surya/checkpoints/pokerpilot_dqn.pt`, which is not
+in git; until it is present at build time, the advisor reports that no
+checkpoint is installed. To retrain the XGBoost models:
+`docker compose --profile train run --rm trainer`.
 
 ## Tests
 
