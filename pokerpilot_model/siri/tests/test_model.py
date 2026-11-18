@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 try:
@@ -8,7 +9,7 @@ except Exception as exc:
     pytest.skip(f"XGBoost runtime unavailable: {exc}", allow_module_level=True)
 
 from pokerpilot_model.siri.data import feature_columns, feature_frame, load_splits
-from pokerpilot_model.siri.model import build_pipeline
+from pokerpilot_model.siri.model import _class_weights, build_pipeline
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -23,3 +24,11 @@ def test_small_classifier_fit_and_predict():
     model.fit(feature_frame(sample, columns), sample.target_action.map(label_to_id))
     prediction = model.predict(feature_frame(frames["val"].head(12), columns))
     assert len(prediction) == 12
+
+
+def test_call_weight_multiplier_only_changes_call_rows():
+    actions = pd.Series(["call", "fold", "call", "check"])
+
+    weights = _class_weights(actions, 0.0, call_weight_multiplier=1.5)
+
+    assert weights.tolist() == [1.5, 1.0, 1.5, 1.0]

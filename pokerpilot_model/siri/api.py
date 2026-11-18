@@ -20,13 +20,17 @@ class DecisionFeatures(BaseModel):
 
 @lru_cache(maxsize=1)
 def artifact() -> dict:
-    path = Path(os.getenv("POKERPILOT_MODEL_PATH", "pokerpilot_model/artifacts/model.joblib"))
+    path = Path(os.getenv(
+        "POKERPILOT_MODEL_PATH", "pokerpilot_model/siri/artifacts/model.joblib"
+    ))
     return load_model(path)
 
 
 @app.get("/health")
 def health() -> dict:
-    path = Path(os.getenv("POKERPILOT_MODEL_PATH", "pokerpilot_model/artifacts/model.joblib"))
+    path = Path(os.getenv(
+        "POKERPILOT_MODEL_PATH", "pokerpilot_model/siri/artifacts/model.joblib"
+    ))
     return {"status": "ready" if path.is_file() else "model_missing"}
 
 

@@ -34,7 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hands", type=int, default=10)
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--model", type=Path, default=Path("pokerpilot_model/artifacts/model.joblib"))
+    parser.add_argument("--model", type=Path, default=Path("pokerpilot_model/siri/artifacts/model.joblib"))
     args = parser.parse_args()
     print(json.dumps(run(args.hands, args.seed, args.model), indent=2))
 

@@ -10,10 +10,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent / "pokerpilot_model"))
 from predict import PokerPilotModel
 
-load_dotenv()  
+load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 app = FastAPI(
     title="Poker Pilot API",
@@ -46,19 +46,19 @@ class PilotResponse(BaseModel):
 
 
 
-def ask_gpt(prompt: str) -> str:
-    """Small wrapper around the OpenAI API. Swap the prompt/model here."""
-    from openai import OpenAI
+def ask_gemini(prompt: str) -> str:
+    """Small wrapper around the Gemini API."""
+    from google import genai
 
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    result = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": "You are Poker Pilot, a friendly poker coach. Keep answers under 80 words."},
-            {"role": "user", "content": prompt},
-        ],
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    result = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=(
+            "You are Poker Pilot, a friendly poker coach. "
+            "Keep answers under 80 words. " + prompt
+        ),
     )
-    return result.choices[0].message.content
+    return result.text
 
 
 @app.get("/")
@@ -69,7 +69,7 @@ def root():
 @app.get("/health")
 def health():
     """API HEALTH check - used by Docker and to confirm the server is up."""
-    return {"status": "ok", "gpt_configured": bool(OPENAI_API_KEY)}
+    return {"status": "ok", "gemini_configured": bool(GEMINI_API_KEY)}
 
 
 @app.post("/api/pilot", response_model=PilotResponse)
@@ -80,16 +80,16 @@ def pilot(data: UserInput):
         raise HTTPException(status_code=400, detail="Username can't be empty.")
 
     
-    if not OPENAI_API_KEY:
+    if not GEMINI_API_KEY:
         return PilotResponse(
             username=name,
-            message=f"Welcome to the table, {name}! (Mock reply: add OPENAI_API_KEY to get real GPT output.)",
+            message=f"Welcome to the table, {name}! (Mock reply: add GEMINI_API_KEY to get real Gemini output.)",
             source="mock",
         )
 
     try:
-        reply = ask_gpt(f"Greet the player '{name}' and give them one beginner poker tip.")
+        reply = ask_gemini(f"Greet the player '{name}' and give them one beginner poker tip.")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GPT request failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Gemini request failed: {e}")
 
-    return PilotResponse(username=name, message=reply, source="gpt")
+    return PilotResponse(username=name, message=reply, source="gemini")

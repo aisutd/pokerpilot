@@ -8,6 +8,10 @@ same table UI and AI players as `PokerPilot-Website`; rules are handled by
 ## Run it
 
 Needs Python 3.11+ and, for the table chat, Node.js 20.19+ with npm.
+The shared account database must be configured in the repository-root `.env`;
+apply `backend/migrations/001_auth_uniqueness.sql` and
+`backend/migrations/002_leaderboard.sql` in Supabase before creating or joining
+rooms.
 
 Double-click `start.bat`. It sets everything up the first time, builds the
 chat box, starts the chat server in a minimized window and opens the site.
@@ -66,12 +70,24 @@ is a separate player. A reload keeps your seat.
   everyone's chips.
 - If the host leaves, the next player becomes host.
 
+### Leaderboard
+
+Open **Leaderboard** from the lobby or the in-game Menu. It ranks registered
+players by their cumulative net winnings from completed multiplayer hands.
+Only engine-settled results are saved; retries are idempotent.
+
 ### Table chat
 
 Players in a room can talk in the **Chat with fellow Pokermates** window in
 the lower-right corner, headed with the room code (Poker game: CODE). Drag it by its header; **−** / **+** folds it away.
-It starts folded in the waiting room and on small screens. Your room name is
-filled in; click **Join Chat**.
+It starts folded in the waiting room and on small screens. The chat joins
+automatically using your table name, so unread messages are counted even while
+the window is closed.
+
+Other players see a notice when you join chat. The Chat button shows an
+unread-message count while the chat is closed or minimized; opening the chat
+clears the count. If browser notifications were previously allowed, messages
+and joins can also trigger a desktop notification when the page is hidden.
 
 The chat box is the team's (`client/` and `chat-api/`, from the
 `websockets` / `PokerEngine-frontend` branches of `aisutd/pokerpilot`),

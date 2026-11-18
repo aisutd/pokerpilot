@@ -54,12 +54,15 @@ def metrics(y_true: pd.Series, y_pred: np.ndarray, labels: list[str]) -> dict:
     }
 
 
-def _class_weights(actions: pd.Series, power: float) -> np.ndarray:
+def _class_weights(actions: pd.Series, power: float,
+                   call_weight_multiplier: float = 1.0) -> np.ndarray:
     if power == 0:
-        return np.ones(len(actions), dtype=float)
-    counts = actions.value_counts()
-    scale = len(actions) / (len(counts) * counts)
-    return actions.map(scale.pow(power)).to_numpy(dtype=float)
+        weights = np.ones(len(actions), dtype=float)
+    else:
+        counts = actions.value_counts()
+        scale = len(actions) / (len(counts) * counts)
+        weights = actions.map(scale.pow(power)).to_numpy(dtype=float)
+    return weights * np.where(actions.eq("call"), call_weight_multiplier, 1.0)
 
 
 def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
@@ -68,16 +71,18 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
     labels = sorted(frames["train"][TARGET].unique().tolist())
     label_to_id = {label: index for index, label in enumerate(labels)}
     train_y = frames["train"][TARGET].map(label_to_id)
-    best_config, best_score, val_result = None, -1.0, None
+    best_config, best_score, val_result = None, (-1.0, -1.0), None
     default_rounds = sorted(set((min(100, estimators), min(200, estimators), estimators)))
     candidate_configs = [
-        {"n_estimators": rounds, "max_depth": 5, "class_weight_power": 0.0}
+        {"n_estimators": rounds, "max_depth": 5, "class_weight_power": 0.0,
+         "call_weight_multiplier": 1.0}
         for rounds in default_rounds
     ]
     candidate_configs.extend(
         {"n_estimators": min(rounds, estimators), "max_depth": depth,
-         "class_weight_power": 0.5}
+         "class_weight_power": 0.5, "call_weight_multiplier": call_multiplier}
         for depth in (3, 5) for rounds in (100, 150, 200, 250)
+        for call_multiplier in (1.0, 1.25, 1.5)
     )
     train_x = feature_frame(frames["train"], columns)
     val_x = feature_frame(frames["val"], columns)
@@ -87,13 +92,21 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
                                    max_depth=config["max_depth"])
         candidate.fit(train_x, train_y,
                       classifier__sample_weight=_class_weights(
-                          frames["train"][TARGET], config["class_weight_power"]))
+                          frames["train"][TARGET], config["class_weight_power"],
+                          config["call_weight_multiplier"]))
         val_pred = [labels[int(index)] for index in candidate.predict(
             val_x)]
         score = f1_score(frames["val"][TARGET], val_pred, labels=labels,
                          average="macro", zero_division=0)
-        if score > best_score:
-            best_config, best_score = config, score
+        focus_score = f1_score(
+            frames["val"][TARGET], val_pred,
+            labels=[action for action in ("check", "call", "bet", "raise")
+                    if action in labels],
+            average="macro", zero_division=0,
+        )
+        selection_score = (focus_score, score)
+        if selection_score > best_score:
+            best_config, best_score = config, selection_score
             val_result = metrics(frames["val"][TARGET], val_pred, labels)
 
     # Validation selects boosting rounds; the final model refits on train+val.
@@ -105,7 +118,8 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
     fit_rows = pd.concat([frames["train"], frames["val"]], ignore_index=True)
     selected.fit(feature_frame(fit_rows, columns), fit_rows[TARGET].map(label_to_id),
                  classifier__sample_weight=_class_weights(
-                     fit_rows[TARGET], best_config["class_weight_power"]))
+                     fit_rows[TARGET], best_config["class_weight_power"],
+                     best_config["call_weight_multiplier"]))
     test_pred = [labels[int(index)] for index in selected.predict(
         feature_frame(frames["test"], columns))]
     test_result = metrics(frames["test"][TARGET], test_pred, labels)
@@ -121,6 +135,7 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
                  "best_iteration": best_config["n_estimators"],
                  "max_depth": best_config["max_depth"],
                  "class_weight_power": best_config["class_weight_power"],
+                 "call_weight_multiplier": best_config["call_weight_multiplier"],
                  "raise_size_median": {
                      action: float(fit_rows.loc[fit_rows[TARGET].eq(action),
                                                 "target_action_amount_to_bb"].median())
@@ -135,6 +150,7 @@ def train(data_dir: Path, output_dir: Path, estimators: int = 350) -> dict:
         "selected_estimators": best_config["n_estimators"],
         "selected_max_depth": best_config["max_depth"],
         "selected_class_weight_power": best_config["class_weight_power"],
+        "selected_call_weight_multiplier": best_config["call_weight_multiplier"],
         "test": test_result, "baselines": baselines,
         "majority_action": majority_action,
     }

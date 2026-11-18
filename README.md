@@ -1,11 +1,11 @@
 # PokerPilot
 
 PokerPilot includes a single-player poker app, a multiplayer room app, shared
-table chat, and model/advisor experiments. The game apps use PokerKit. Accounts
-and sessions are stored by the server in the existing Supabase PostgreSQL
-schema `pokerpilot`.
+table chat, and model/advisor experiments. The game apps use PokerKit.
+Accounts, sessions, and multiplayer leaderboard results are stored by the
+server in the existing Supabase PostgreSQL schema `pokerpilot`.
 
-## Supabase authentication setup
+## Supabase setup
 
 The backend connects with `DATABASE_URL`; the connection string and database
 password must stay on the server. Copy `.env.example` to `.env`, then set the
@@ -21,9 +21,11 @@ create a second account system or duplicate tables. The expected columns are:
 Username and email must each have a case-insensitive unique index. First check
 for conflicting existing names/emails with these queries, then apply
 [`backend/migrations/001_auth_uniqueness.sql`](backend/migrations/001_auth_uniqueness.sql)
-in the Supabase SQL editor. The migration adds indexes to the existing table;
-it does not create tables or copy user data. The auth health endpoint checks
-the schema without changing it:
+in the Supabase SQL editor. To enable the multiplayer leaderboard, also apply
+[`backend/migrations/002_leaderboard.sql`](backend/migrations/002_leaderboard.sql).
+It creates the leaderboard profile and per-hand result tables; scores are
+recorded from settled multiplayer hands and retries cannot double-count them.
+The auth health endpoint checks the auth schema without changing it:
 
 ```sql
 SELECT lower(username), count(*) FROM pokerpilot.users GROUP BY 1 HAVING count(*) > 1;
@@ -68,8 +70,8 @@ and start the chat relay:
 ```bash
 npm ci --prefix Multiplayer-Mode/client
 npm run build --prefix Multiplayer-Mode/client
-npm ci --prefix chat-api
-npm start --prefix chat-api
+npm ci --prefix Multiplayer-Mode/chat-api
+npm start --prefix Multiplayer-Mode/chat-api
 ```
 
 In another terminal:
@@ -138,3 +140,11 @@ The auth tests exercise password hashing, parameterized SQL calls, account and
 session API behavior, duplicate handling, rate limits, CSRF checks, and the
 two-app login gates with a mocked data layer. Run the auth health endpoint
 against your Supabase project to verify the real schema and connection.
+
+## Multiplayer and ngrok
+
+The multiplayer app starts or reuses an ngrok tunnel to port 5001 when you run
+`Multiplayer-Mode/app.py`. Install ngrok, configure its authtoken once, and
+start the chat relay with `npm start --prefix Multiplayer-Mode/chat-api`.
+The app prints the public URL; its `/chat-ws` route carries chat over the same
+tunnel. See [Multiplayer-Mode/README.md](Multiplayer-Mode/README.md) for details.

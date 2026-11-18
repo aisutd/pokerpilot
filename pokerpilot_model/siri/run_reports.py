@@ -22,6 +22,7 @@ def render_training(results: dict) -> str:
         f"- Selected boosting rounds: `{results['selected_estimators']}`",
         f"- Selected maximum tree depth: `{results['selected_max_depth']}`",
         f"- Class-weight power: `{results['selected_class_weight_power']}`",
+        f"- Call-class weight multiplier: `{results['selected_call_weight_multiplier']}`",
         f"- Features: {len(results['features'])}",
         "",
         "## Split metrics",

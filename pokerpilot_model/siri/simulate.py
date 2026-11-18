@@ -36,9 +36,9 @@ def replay(data_dir: Path, model_path: Path, split: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=Path, default=Path("Dataset"))
-    parser.add_argument("--model", type=Path, default=Path("pokerpilot_model/artifacts/model.joblib"))
+    parser.add_argument("--model", type=Path, default=Path("pokerpilot_model/siri/artifacts/model.joblib"))
     parser.add_argument("--split", choices=("val", "test"), default="test")
-    parser.add_argument("--report-dir", type=Path, default=Path("pokerpilot_model/results"))
+    parser.add_argument("--report-dir", type=Path, default=Path("pokerpilot_model/siri/results"))
     args = parser.parse_args()
     results = replay(args.data_dir, args.model, args.split)
     results["report_path"] = str(write_run_report(args.report_dir, args.split, results))

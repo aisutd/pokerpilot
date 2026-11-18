@@ -5,6 +5,7 @@ import './App.css';
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 interface ChatMessage {
+  type?: 'message' | 'join';
   sender: string;
   text: string;
   timestamp: string;
@@ -20,13 +21,17 @@ function isChatMessage(message: unknown): message is ChatMessage {
     && typeof message.sender === 'string'
     && 'text' in message
     && typeof message.text === 'string'
+    && (!('type' in message) || message.type === 'message' || message.type === 'join')
     && (!('timestamp' in message) || typeof message.timestamp === 'string');
 }
 
 function App() {
   const chatRoom = new URLSearchParams(window.location.search).get('room') || '';
   const [username, setUsername] = useState(() => localStorage.getItem('pokerpilot-chat-name') || '');
-  const [isJoined, setIsJoined] = useState(false);
+  const [isJoined, setIsJoined] = useState(() => (
+    /^[A-Za-z0-9_-]{20,64}$/.test(chatRoom)
+    && Boolean(localStorage.getItem('pokerpilot-chat-name')?.trim())
+  ));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -57,7 +62,9 @@ function App() {
         return;
       }
       setConnectionStatus('Connecting…');
-      const socket = new WebSocket(`${CHAT_WS_BASE_URL}?room=${encodeURIComponent(chatRoom)}`);
+      const socket = new WebSocket(
+        `${CHAT_WS_BASE_URL}?room=${encodeURIComponent(chatRoom)}&name=${encodeURIComponent(username)}`,
+      );
       socketRef.current = socket;
 
       socket.onopen = () => setConnectionStatus('Connected');
@@ -66,7 +73,29 @@ function App() {
           const message: unknown = JSON.parse(event.data);
           if (isChatMessage(message)) {
             setConnectionStatus('Connected');
-            setMessages((previous) => [...previous, { ...message, timestamp: message.timestamp || '' }].slice(-200));
+            const chatMessage = {
+              ...message,
+              type: message.type ?? 'message',
+              timestamp: message.timestamp || '',
+            };
+            setMessages((previous) => [...previous, chatMessage].slice(-200));
+            if (chatMessage.type === 'message' && chatMessage.sender !== username && window.parent !== window) {
+              window.parent.postMessage(
+                { type: 'pokerpilot-chat-message', room: chatRoom },
+                window.location.origin,
+              );
+            }
+            if (
+              chatMessage.sender !== username
+              && document.hidden
+              && typeof Notification !== 'undefined'
+              && Notification.permission === 'granted'
+            ) {
+              const title = chatMessage.type === 'join'
+                ? `${chatMessage.sender} joined the chat`
+                : `Message from ${chatMessage.sender}`;
+              new Notification(title, { body: chatMessage.text });
+            }
           }
         } catch {
           setConnectionStatus('Received an invalid chat message');
@@ -88,7 +117,7 @@ function App() {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [chatRoom, isJoined]);
+  }, [chatRoom, isJoined, username]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -98,6 +127,11 @@ function App() {
     event.preventDefault();
     const name = username.trim().slice(0, 24);
     if (!name) return;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void Notification.requestPermission().catch((error: unknown) => {
+        console.warn('Could not request chat notification permission:', error);
+      });
+    }
     localStorage.setItem('pokerpilot-chat-name', name);
     setUsername(name);
     setIsJoined(true);
@@ -157,6 +191,13 @@ function App() {
 
       <div className="chat-container" role="log" aria-live="polite" aria-relevant="additions">
         {messages.map((message, index) => {
+          if (message.type === 'join') {
+            return (
+              <div key={`${message.timestamp}-${index}`} className="chat-system-message" role="status">
+                {message.text}
+              </div>
+            );
+          }
           const isSelf = message.sender === username;
           return (
             <div key={`${message.timestamp}-${index}`} className={`chat-message-wrapper ${isSelf ? 'self' : 'other'}`}>

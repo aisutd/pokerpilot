@@ -171,6 +171,9 @@ class Room:
         # The table chat (chat-api) room. Secret, unlike the room code, so
         # only people in this room can read or post in its chat.
         self.chat_room = secrets.token_urlsafe(24)
+        self.leaderboard_game_id = secrets.token_urlsafe(24)
+        self.pending_round_results: list[dict[str, str | int]] = []
+        self.on_results_ready: Callable[[], None] | None = None
 
         self.hand_number = 0
         self.button: int | None = None
@@ -416,6 +419,8 @@ class Room:
             self.timer.start()
 
     def fire(self, gen: int) -> None:
+        on_results_ready = None
+
         with self.lock:
             if gen != self.gen or self.pending is None:
                 return
@@ -428,6 +433,12 @@ class Room:
             except Exception:
                 traceback.print_exc()
                 self.changed()
+
+            if self.pending_round_results:
+                on_results_ready = self.on_results_ready
+
+        if on_results_ready is not None:
+            on_results_ready()
 
     def run_pending(self) -> bool:
         """Run the scheduled step now (for tests). False if none."""
@@ -848,6 +859,20 @@ class Room:
             'showdown': showdown,
             'nets': {self.seats[seat].token: state.payoffs[i] for i, seat in enumerate(self.order)},
         }
+
+        for i, seat_index in enumerate(self.order):
+            seat = self.seats[seat_index]
+            if seat is None:
+                continue
+
+            player = self.players.get(seat.token) if seat.token else None
+
+            if player is not None and player.account_id is not None:
+                self.pending_round_results.append({
+                    'account_id': str(player.account_id),
+                    'round_number': self.hand_number,
+                    'net_cents': int(state.payoffs[i]),
+                })
 
         for seat in self.order:
             if self.seats[seat].stack == 0:
